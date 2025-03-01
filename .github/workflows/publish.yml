@@ -27,13 +27,13 @@ jobs:
           
           # Validate the module manifest
           Write-Host "Validating module manifest..." -ForegroundColor Cyan
-          $manifest = Test-ModuleManifest -Path "./ps-galley-build/pwsh-neofetch.psd1" -ErrorAction Stop -WarningAction SilentlyContinue
+          $manifest = Test-ModuleManifest -Path "./ps-gallery-build/pwsh-neofetch.psd1" -ErrorAction Stop -WarningAction SilentlyContinue
           Write-Host "Module name: $($manifest.Name)" -ForegroundColor Green
           Write-Host "Module version: $($manifest.Version)" -ForegroundColor Green
           
           # Display module folders and files
           Write-Host "Module files:" -ForegroundColor Cyan
-          Get-ChildItem -Path "./ps-galley-build" -Recurse | ForEach-Object {
+          Get-ChildItem -Path "./ps-gallery-build" -Recurse | ForEach-Object {
             Write-Host "  $($_.FullName.Replace("$PWD/", ''))"
           }
       
@@ -44,5 +44,5 @@ jobs:
           [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
           
           Write-Host "Publishing module to PowerShell Gallery..." -ForegroundColor Cyan
-          Publish-Module -Path "./ps-galley-build" -NuGetApiKey ${{ secrets.PSGALLERY_KEY }} -Verbose
+          Publish-Module -Path "./ps-gallery-build" -NuGetApiKey ${{ secrets.PSGALLERY_KEY }} -Verbose
           Write-Host "Module published successfully!" -ForegroundColor Green
