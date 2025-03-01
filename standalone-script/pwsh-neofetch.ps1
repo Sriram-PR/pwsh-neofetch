@@ -848,7 +848,7 @@ function Get-ProcessedASCIIArt {
 function Show-Usage {
     Write-Host ""
     Write-Host "Windows Neofetch Script Usage:" -ForegroundColor Cyan
-    Write-Host "  .\windows-neofetch.ps1 [options]" -ForegroundColor White
+    Write-Host "  neofetch [options]" -ForegroundColor White
     Write-Host ""
     Write-Host "Options:" -ForegroundColor Cyan
     Write-Host "  -init                Run the configuration wizard to set up neofetch preferences." -ForegroundColor White
@@ -871,21 +871,21 @@ function Show-Usage {
     Write-Host "  -help              Display this help message." -ForegroundColor White
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor Cyan
-    Write-Host "  .\windows-neofetch.ps1" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -init" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -init -Force" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -asciiart C:\path\to\ascii\art.txt" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -defaultart" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -changes" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -maxThreads 8" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -defaultthreads" -ForegroundColor White
-    Write-Host '  .\windows-neofetch.ps1 -profileName "PowerShell"' -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -defaultprofile" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -cacheExpiration 3600" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -nocache" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -minimal" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -benchmark" -ForegroundColor White
-    Write-Host "  .\windows-neofetch.ps1 -reload" -ForegroundColor White
+    Write-Host "  neofetch" -ForegroundColor White
+    Write-Host "  neofetch -init" -ForegroundColor White
+    Write-Host "  neofetch -init -Force" -ForegroundColor White
+    Write-Host "  neofetch -asciiart C:\path\to\ascii\art.txt" -ForegroundColor White
+    Write-Host "  neofetch -defaultart" -ForegroundColor White
+    Write-Host "  neofetch -changes" -ForegroundColor White
+    Write-Host "  neofetch -maxThreads 8" -ForegroundColor White
+    Write-Host "  neofetch -defaultthreads" -ForegroundColor White
+    Write-Host '  neofetch -profileName "PowerShell"' -ForegroundColor White
+    Write-Host "  neofetch -defaultprofile" -ForegroundColor White
+    Write-Host "  neofetch -cacheExpiration 3600" -ForegroundColor White
+    Write-Host "  neofetch -nocache" -ForegroundColor White
+    Write-Host "  neofetch -minimal" -ForegroundColor White
+    Write-Host "  neofetch -benchmark" -ForegroundColor White
+    Write-Host "  neofetch -reload" -ForegroundColor White
     Write-Host ""
     exit
 }
@@ -1020,7 +1020,7 @@ function Initialize-NeofetchConfig {
     if ($customArtOption -match "^[Yy]") {
         $useCustomArt = $true
         Write-Host "`nTo set custom ASCII art, use this command after setup completes:"
-        Write-Host "${BOLD}.\windows-neofetch.ps1 -asciiart `"C:\path\to\your\ascii_art.txt`"${RESET}"
+        Write-Host "${BOLD}neofetch -asciiart `"C:\path\to\your\ascii_art.txt`"${RESET}"
     } else {
         Write-Host "Using default Windows logo ASCII art"
     }
@@ -1040,10 +1040,10 @@ function Initialize-NeofetchConfig {
     Write-Host "${BOLD}ASCII Art:${RESET} $(if($useCustomArt){"Custom (not set yet)"}else{"Default Windows logo"})"
 
     Write-Host "`n${BOLD}${CYAN}Helpful Commands:${RESET}"
-    Write-Host "- ${BOLD}.\windows-neofetch.ps1${RESET} - Run neofetch with your settings"
-    Write-Host "- ${BOLD}.\windows-neofetch.ps1 -help${RESET} - Show all available commands"
-    Write-Host "- ${BOLD}.\windows-neofetch.ps1 -changes${RESET} - Display current configuration"
-    Write-Host "- ${BOLD}.\windows-neofetch.ps1 -reload${RESET} - Reset all settings to defaults"
+    Write-Host "- ${BOLD}neofetch${RESET} - Run neofetch with your settings"
+    Write-Host "- ${BOLD}neofetch -help${RESET} - Show all available commands"
+    Write-Host "- ${BOLD}neofetch -changes${RESET} - Display current configuration"
+    Write-Host "- ${BOLD}neofetch -reload${RESET} - Reset all settings to defaults"
 
     $runNeofetch = Read-Host "`nRun neofetch now? (Y/n)"
 
