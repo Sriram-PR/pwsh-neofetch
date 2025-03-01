@@ -14,9 +14,9 @@ jobs:
           fetch-depth: 0
       
       - name: Set up PowerShell
-        uses: actions/setup-powershell@v1
+        uses: actions/setup-powershell@v3
         with:
-          powershell-version: '7.5'
+          powershell-version: 'latest'
       
       - name: Prepare module for publishing
         shell: pwsh
