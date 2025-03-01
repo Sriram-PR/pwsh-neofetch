@@ -21,14 +21,6 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 - 🧩 Minimal view option for essential information only
 - 🛠️ Configuration wizard for easy setup
 
-## Screenshots
-
-<p align="center"><img alt="neofetch-basic" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-basic.png" width="600px"></p>
-<div align="center">
-  <img alt="neofetch-minimal" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-minimal.png" width="350px" style="display:inline-block; margin-right:20px;">
-  <img alt="neofetch-benchmark" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-benchmark.png" width="300px" style="display:inline-block;">
-</div>
-
 ## Installation
 
 ### From PowerShell Gallery (Recommended)
@@ -88,6 +80,8 @@ After installation, simply run:
 neofetch
 ```
 
+<p align="center"><img alt="neofetch-basic" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-basic.png" width="600px"></p>
+
 On a fresh install, this command will automatically launch the configuration wizard to help you set up your preferences.
 
 ## Configuration Options
@@ -133,9 +127,9 @@ Basic usage:
 neofetch
 ```
 
-First-time setup:
+Force reconfiguration:
 ```powershell
-neofetch -init
+neofetch -init -Force
 ```
 
 Using custom ASCII art:
