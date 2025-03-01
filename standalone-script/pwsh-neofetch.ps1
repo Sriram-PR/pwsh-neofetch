@@ -874,12 +874,12 @@ function Show-Usage {
     Write-Host "  neofetch" -ForegroundColor White
     Write-Host "  neofetch -init" -ForegroundColor White
     Write-Host "  neofetch -init -Force" -ForegroundColor White
-    Write-Host "  neofetch -asciiart C:\path\to\ascii\art.txt" -ForegroundColor White
+    Write-Host "  neofetch -asciiart `"C:\path\to\ascii\art.txt`"" -ForegroundColor White
     Write-Host "  neofetch -defaultart" -ForegroundColor White
     Write-Host "  neofetch -changes" -ForegroundColor White
     Write-Host "  neofetch -maxThreads 8" -ForegroundColor White
     Write-Host "  neofetch -defaultthreads" -ForegroundColor White
-    Write-Host '  neofetch -profileName "PowerShell"' -ForegroundColor White
+    Write-Host "  neofetch -profileName `"PowerShell`"" -ForegroundColor White
     Write-Host "  neofetch -defaultprofile" -ForegroundColor White
     Write-Host "  neofetch -cacheExpiration 3600" -ForegroundColor White
     Write-Host "  neofetch -nocache" -ForegroundColor White
