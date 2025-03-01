@@ -209,7 +209,7 @@ neofetch -reload
 
 ## Roadmap / Planned Features
 
-These are the features we're planning to implement in future releases:
+These are the features I'm planning to implement in future releases:
 
 - [x] Multi-threaded system information collection
 - [x] Custom ASCII art support
