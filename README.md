@@ -1,4 +1,5 @@
 <h3 align="center"><img alt="logo" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/pwsh-neofetch.png" width="500px"></h3>
+<br />
 
 A feature-rich PowerShell implementation of the popular Neofetch system information tool for Windows. This script/module displays system information with customizable ASCII art in your terminal, similar to the original Neofetch but designed specifically for Windows environments.
 
