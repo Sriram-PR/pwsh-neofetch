@@ -1,5 +1,4 @@
 <h3 align="center"><img alt="logo" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/pwsh-neofetch.png" width="500px"></h3>
-<br />
 
 <p align="center">
 <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/Sriram-PR/pwsh-neofetch.svg?color=blue"></a>
