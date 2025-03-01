@@ -1,0 +1,53 @@
+name: Publish to PowerShell Gallery
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up PowerShell
+        uses: actions/setup-powershell@v1
+        with:
+          powershell-version: '7.5'
+      
+      - name: Prepare module for publishing
+        shell: pwsh
+        run: |
+          # Check module structure
+          Write-Host "Checking module structure..." -ForegroundColor Cyan
+          if (-not (Test-Path -Path "./ps-gallery-build/pwsh-neofetch.psd1")) {
+            throw "Module manifest not found at expected location"
+          }
+          if (-not (Test-Path -Path "./ps-gallery-build/pwsh-neofetch.psm1")) {
+            throw "Module script file not found at expected location"
+          }
+          
+          # Validate the module manifest
+          Write-Host "Validating module manifest..." -ForegroundColor Cyan
+          $manifest = Test-ModuleManifest -Path "./ps-galley-build/pwsh-neofetch.psd1" -ErrorAction Stop -WarningAction SilentlyContinue
+          Write-Host "Module name: $($manifest.Name)" -ForegroundColor Green
+          Write-Host "Module version: $($manifest.Version)" -ForegroundColor Green
+          
+          # Display module folders and files
+          Write-Host "Module files:" -ForegroundColor Cyan
+          Get-ChildItem -Path "./ps-galley-build" -Recurse | ForEach-Object {
+            Write-Host "  $($_.FullName.Replace("$PWD/", ''))"
+          }
+      
+      - name: Publish to PowerShell Gallery
+        shell: pwsh
+        run: |
+          # Set TLS 1.2 protocol for PowerShell Gallery compatibility
+          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+          
+          Write-Host "Publishing module to PowerShell Gallery..." -ForegroundColor Cyan
+          Publish-Module -Path "./ps-galley-build" -NuGetApiKey ${{ secrets.PSGALLERY_KEY }} -Verbose
+          Write-Host "Module published successfully!" -ForegroundColor Green
