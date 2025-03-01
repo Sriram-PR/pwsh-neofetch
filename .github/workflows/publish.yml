@@ -9,14 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Set up PowerShell
-        uses: actions/setup-powershell@v3
-        with:
-          powershell-version: 'latest'
       
       - name: Prepare module for publishing
         shell: pwsh
