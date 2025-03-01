@@ -91,8 +91,8 @@ function Uninstall-Neofetch {
     Write-ColorMessage "`n===== PowerShell Neofetch Uninstaller =====" -ForegroundColor Cyan
     
     if (-not $Force) {
-        $confirm = Read-Host "Are you sure you want to uninstall PowerShell Neofetch? (y/n)"
-        if ($confirm -ne "y") {
+        $confirm = Read-Host "Are you sure you want to uninstall PowerShell Neofetch? (Y/n)"
+        if ($confirm -match "^[Nn]") {
             Write-ColorMessage "Uninstallation cancelled." -ForegroundColor Yellow
             return
         }
