@@ -21,6 +21,11 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 - 🧩 Minimal view option for essential information only
 - 🛠️ Configuration wizard for easy setup
 
+## Screenshots
+
+<h3 align="center"><img alt="logo" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-basic.png" width="600px"></h3>
+<h3 align="center"><img alt="logo" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-minimal.png" width="600px"></h3>
+
 ## Installation
 
 ### From PowerShell Gallery (Recommended)
@@ -167,6 +172,8 @@ Example of a simple ASCII art file:
 ⠄⠄⠄⣿⡇⣿⠄⠄⠙⢿⣿⣷⣶⣶⣶⣾⣿⣿⠟⠋⠄⠄⣿⣿⢳⣿⣿⢹⡇⠄
 ⠄⠄⠄⠘⣿⢸⢰⣆⠄⠄⠙⠻⣿⡿⠟⠛⠉⠄⠄⠄⠄⠄⣿⡟⣼⣿⢏⣿⢧⣷
 ```
+
+<h3 align="center"><img alt="logo" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-zerotwo.png" width="600px"></h3>
 
 ## System Benchmark
 
