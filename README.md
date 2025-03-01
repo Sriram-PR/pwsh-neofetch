@@ -24,7 +24,7 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 ## Screenshots
 
 <p align="center"><img alt="neofetch-basic" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-basic.png" width="600px"></p>
-<p align="center"><img alt="neofetch-minimal" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-minimal.png" width="400px"></p>
+<p align="center"><img alt="neofetch-minimal" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-minimal.png" width="350px"></p>
 <p align="center"><img alt="neofetch-benchmark" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-benchmark.png" width="300px"></p>
 
 ## Installation
