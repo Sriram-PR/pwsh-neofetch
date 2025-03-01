@@ -207,6 +207,24 @@ To start fresh:
 neofetch -reload
 ```
 
+## Roadmap / Planned Features
+
+These are the features we're planning to implement in future releases:
+
+- [x] Multi-threaded system information collection
+- [x] Custom ASCII art support
+- [x] Caching system for improved performance
+- [x] System benchmarking utility
+- [ ] Color theme customization
+- [ ] User-configurable information display order
+- [ ] Export system information to file (JSON, CSV, TXT)
+- [ ] Comparison mode to highlight system changes over time
+- [ ] Remote system information collection
+- [ ] Gallery of pre-made ASCII art templates
+- [ ] Plugin system for custom information modules
+- [ ] Integration with hardware monitoring tools
+- [ ] Localization support for multiple languages
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
