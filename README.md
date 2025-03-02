@@ -4,8 +4,7 @@
 <a href="./LICENSE.md"><img src="https://img.shields.io/github/license/Sriram-PR/pwsh-neofetch.svg?color=blue"></a>
 <a href="https://github.com/Sriram-PR/pwsh-neofetch/releases"><img src="https://img.shields.io/github/v/release/Sriram-PR/pwsh-neofetch.svg?color=blue"></a>
 <a><img src="https://img.shields.io/powershellgallery/dt/pwsh-neofetch.svg?color=blue"></a>
-<a><img src="https://img.shields.io/github/languages/top/Sriram-PR/pwsh-neofetch.svg?color=blue
-"></a>
+<a><img src="https://img.shields.io/github/languages/top/Sriram-PR/pwsh-neofetch?color=blue"></a>
 <a><img src="https://img.shields.io/powershellgallery/p/pwsh-neofetch?color=blue"></a>
 </p>
 <br />
