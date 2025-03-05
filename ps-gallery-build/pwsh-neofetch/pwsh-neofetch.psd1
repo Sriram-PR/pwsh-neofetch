@@ -1,7 +1,7 @@
 @{
     RootModule = 'pwsh-neofetch.psm1'
     
-    ModuleVersion = '1.1.1'
+    ModuleVersion = '1.1.2'
     
     GUID = '4dc7d7d4-9924-4545-bd71-99932a7f6f8a'
     
@@ -34,7 +34,7 @@
             
             # IconUri = ''
             
-            ReleaseNotes = 'v1.1 final'
+            ReleaseNotes = 'v1.1.2 - Fixed username retrieval issue, improved compatibility on Windows Terminal'
         }
     }
 }
