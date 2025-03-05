@@ -519,9 +519,9 @@ function Get-SystemInfoFast {
     $runspaces = @{}
     $handles = @{}
     
-    $results.UserName = $env:USERNAME
+    $results.UserName = [System.Environment]::UserName
     $results.HostName = $env:COMPUTERNAME
-    $results.UserHost = "$($env:USERNAME)@$($env:COMPUTERNAME)"
+    $results.UserHost = "$([System.Environment]::UserName)@$($env:COMPUTERNAME)"
     
     if (-not $useCache -or -not $results.ContainsKey("OS")) {
         $OSName = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name ProductName).ProductName
