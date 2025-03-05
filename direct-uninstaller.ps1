@@ -5,7 +5,7 @@
     This script removes PowerShell Neofetch from your system, including modules, installation files, and profile references.
 .NOTES
     Author: Sriram PR
-    Version: 1.0
+    Version: 1.1
 #>
 
 [CmdletBinding()]
