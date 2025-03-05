@@ -127,6 +127,23 @@ function Uninstall-Neofetch {
                 
                 Write-ColorMessage "Configuration files backed up to: $backupDir" -ForegroundColor Green
             }
+            else {
+                # Delete config files if not keeping them
+                $configFiles = @(
+                    ".neofetch_ascii",
+                    ".neofetch_cache_expiration",
+                    ".neofetch_threads",
+                    ".neofetch_profile_name"
+                )
+                
+                foreach ($file in $configFiles) {
+                    $filePath = Join-Path $env:USERPROFILE $file
+                    if (Test-Path $filePath) {
+                        Remove-Item -Path $filePath -Force
+                        Write-ColorMessage "Removed configuration file: $filePath" -ForegroundColor Green
+                    }
+                }
+            }
             
             Remove-Item -Path $InstallPath -Recurse -Force
             Write-ColorMessage "Removed installation directory: $InstallPath" -ForegroundColor Green
