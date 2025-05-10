@@ -742,9 +742,9 @@ function Get-DefaultAsciiArt {
 function Show-LiveUsageGraphs {
     param (
         [ValidateRange(0.1, 60)]
-        [double]$RefreshRateSeconds = 1,
-        [int]$GraphHeightParam = 20, # Renamed to avoid conflict with Render function's internal var
-        [int]$GraphWidthParam = 80   # Renamed
+        [double]$RefreshRateSeconds = 2,
+        [int]$GraphHeightParam = 20,
+        [int]$GraphWidthParam = 80
     )
     
     # --- ANSI Color Codes ---
@@ -764,7 +764,8 @@ function Show-LiveUsageGraphs {
     $RamBarColor = $RamLineColor
     $GpuBarColor = $GpuUtilLineColor
     $VramBarColor = $VramUtilLineColor
-    $ErrorColor = $RED # For "Error fetching data"
+    $ErrorColor = "$ESC[31m" # Red for "Error fetching data"
+    $GRAY = "$ESC[90m"
 
     # --- Graph and History Setup ---
     $maxHistoryLength = $GraphWidthParam * 2  # Keep more history than displayed width for smooth scroll
@@ -775,6 +776,19 @@ function Show-LiveUsageGraphs {
 
     $summaryBarWidth = 40 # Width for the percentage bars below the graph
 
+    # --- NESTED HELPER FUNCTION: Set-CursorPosition (to replace Clear-Host) ---
+    function Set-CursorPosition {
+        param ([int]$X, [int]$Y)
+        $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates $X, $Y
+    }
+
+    # --- NESTED HELPER FUNCTION: Clear-Line ---
+    function Clear-Line {
+        param([int]$Y)
+        Set-CursorPosition 0 $Y
+        Write-Host (" " * $Host.UI.RawUI.BufferSize.Width) -NoNewline
+        Set-CursorPosition 0 $Y
+    }
 
     # --- NESTED HELPER FUNCTION: Format-UsageBar (for summary) ---
     function Format-UsageBar {
@@ -788,7 +802,7 @@ function Show-LiveUsageGraphs {
         $filledChars = [Math]::Round(($Percentage / 100) * $PassedBarWidth)
         $emptyChars = $PassedBarWidth - $filledChars
         
-        $barColorToUse = $GREEN # Default
+        $barColorToUse = "$ESC[32m" # Default Green
         switch -Wildcard ($Label) {
             "*CPU*" { $barColorToUse = $CpuBarColor }
             "*RAM*" { $barColorToUse = $RamBarColor }
@@ -797,7 +811,7 @@ function Show-LiveUsageGraphs {
         }
         # Override for high usage (optional)
         if ($Percentage -ge 90) { $barColorToUse = $ErrorColor } 
-        elseif ($Percentage -ge 70) { if($Label -notmatch "CPU"){ $barColorToUse = $VramBarColor}} # Yellowish for warning
+        elseif ($Percentage -ge 70) { if($Label -notmatch "CPU"){ $barColorToUse = $VramUtilLineColor }} # Yellowish for warning
         
         $paddedLabel = "{0,-10}" -f $Label
         $barSegment = "[" + ($barColorToUse + ("█" * $filledChars) + $RESET) + ("░" * $emptyChars) + "]"
@@ -810,7 +824,8 @@ function Show-LiveUsageGraphs {
     # --- NESTED HELPER FUNCTION: Get-LiveCpuUsage ---
     function Get-LiveCpuUsage {
         try {
-            $cpuLoad = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+            # $cpuLoad = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+            $cpuLoad = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
             return [Math]::Round($cpuLoad, 1)
         } catch { return $null }
     }
@@ -982,8 +997,8 @@ function Show-LiveUsageGraphs {
         $psHost = Get-Host
         $originalBufferWidth = $psHost.UI.RawUI.BufferSize.Width
         $originalBufferHeight = $psHost.UI.RawUI.BufferSize.Height
-        $requiredBufferWidth = $GraphWidthParam + $yAxisLabelWidth + 10 # Add some margin
-        $requiredBufferHeight = $GraphHeightParam + 10 # Add margin for text above/below graph
+        $requiredBufferWidth = $GraphWidthParam + 15 # Add some margin
+        $requiredBufferHeight = $GraphHeightParam + 15 # Add margin for text above/below graph
         if ($originalBufferWidth -lt $requiredBufferWidth -or $originalBufferHeight -lt $requiredBufferHeight) {
             try {
                 $newBufferSize = $psHost.UI.RawUI.BufferSize
@@ -995,7 +1010,22 @@ function Show-LiveUsageGraphs {
             }
         }
         
+        # Calculate total height needed for the display
+        $totalDisplayLines = $GraphHeightParam + 12 # Adjust based on actual content
+        
+        # Initial clear and draw the static parts
         Clear-Host
+        $titleLine = "${BOLD}${MAGENTA}Live System Character Graph (Press 'q' or ESC to quit)${RESET}"
+        Write-Host $titleLine
+        Write-Host ("-" * ($GraphWidthParam + 15))
+        
+        # Initialize display area with empty lines
+        for ($i = 0; $i -lt $totalDisplayLines; $i++) {
+            Write-Host ""
+        }
+        
+        # Remember the start position for updates
+        $startY = 2 # Position after the title and separator
         
         while ($continueLoop) {
             $now = Get-Date
@@ -1028,21 +1058,18 @@ function Show-LiveUsageGraphs {
                 }
 
                 $displayLines = [System.Collections.Generic.List[string]]::new()
-                $displayLines.Add("${BOLD}${MAGENTA}Live System Character Graph (Press 'q' or ESC to quit)${RESET}")
-                $displayLines.Add(("-" * ($GraphWidthParam + $yAxisLabelWidth + 5))) # Corrected reference to $yAxisLabelWidth
 
                 # Render the character line graph
-                $graphCanvasLinesFromRender = Render-CharacterLineGraph -RenderCpuHistory $cpuHistory `
+                $graphCanvasLines = Render-CharacterLineGraph -RenderCpuHistory $cpuHistory `
                     -RenderRamHistory $ramHistory -RenderGpuUtilHistory $gpuUtilHistory -RenderVramUtilHistory $vramUtilHistory `
                     -RenderGraphHeight $GraphHeightParam -RenderGraphWidth $GraphWidthParam `
                     -RenderCpuColor $CpuLineColor -RenderRamColor $RamLineColor -RenderGpuUtilColor $GpuUtilLineColor -RenderVramUtilColor $VramUtilLineColor `
                     -RenderAxisColor $AxisColor -RenderGridColor $GridColor -RenderResetColor $RESET
                 
-                # Add the rendered graph lines one by one
-                foreach ($graphLine in $graphCanvasLinesFromRender) {
+                # Add the rendered graph lines
+                foreach ($graphLine in $graphCanvasLines) {
                     $displayLines.Add($graphLine)
                 }
-                # $displayLines.AddRange($graphCanvasLinesFromRender) # Replaced with foreach loop
 
                 $displayLines.Add("") 
 
@@ -1050,24 +1077,36 @@ function Show-LiveUsageGraphs {
                 # Summary bars using Format-UsageBar
                 if ($null -ne $cpuUsageVal) { $displayLines.Add((Format-UsageBar -Label "CPU" -Percentage $cpuUsageVal -PassedBarWidth $summaryBarWidth)) } 
                 else { $displayLines.Add("CPU:      ${ErrorColor}Error fetching data${RESET}") }
+                
                 if ($null -ne $ramUsageInfoVal) { $displayLines.Add((Format-UsageBar -Label "RAM" -Percentage $ramUsageInfoVal.Percent -AdditionalInfo "$($ramUsageInfoVal.UsedMB)MB/$($ramUsageInfoVal.TotalMB)MB" -PassedBarWidth $summaryBarWidth)) } 
                 else { $displayLines.Add("RAM:      ${ErrorColor}Error fetching data${RESET}") }
+                
                 if ($nvidiaSmiPathFound) {
                     if ($null -ne $gpuUsageInfoVal) {
                         $displayLines.Add((Format-UsageBar -Label "GPU Util" -Percentage $gpuUsageInfoVal.GPUUtilization -PassedBarWidth $summaryBarWidth))
                         $displayLines.Add((Format-UsageBar -Label "VRAM" -Percentage $gpuUsageInfoVal.VRAMPercent -AdditionalInfo "$($gpuUsageInfoVal.VRAMUsedMB)MB/$($gpuUsageInfoVal.VRAMTotalMB)MB" -PassedBarWidth $summaryBarWidth))
                     } else {
-                        $displayLines.Add("GPU Util: ${YELLOW}NVIDIA SMI Error${RESET}"); $displayLines.Add("VRAM:     ${YELLOW}NVIDIA SMI Error${RESET}")
+                        $displayLines.Add("GPU Util: ${ErrorColor}NVIDIA SMI Error${RESET}")
+                        $displayLines.Add("VRAM:     ${ErrorColor}NVIDIA SMI Error${RESET}")
                     }
                 } else {
-                    $displayLines.Add("GPU Util: ${GRAY}nvidia-smi N/A${RESET}"); $displayLines.Add("VRAM:     ${GRAY}nvidia-smi N/A${RESET}")
+                    $displayLines.Add("GPU Util: ${GRAY}nvidia-smi N/A${RESET}")
+                    $displayLines.Add("VRAM:     ${GRAY}nvidia-smi N/A${RESET}")
                 }
                 
-                $displayLines.Add(("-" * ($GraphWidthParam + $yAxisLabelWidth + 5)))
+                $displayLines.Add(("-" * ($GraphWidthParam + 15)))
                 $displayLines.Add("${GRAY}Updated: $(Get-Date -Format 'HH:mm:ss')${RESET} | Refresh: ${RefreshRateSeconds}s")
 
-                Clear-Host
-                $displayLines -join [System.Environment]::NewLine | Write-Host
+                # Update the display in-place using cursor positioning
+                $currentY = $startY
+                foreach ($line in $displayLines) {
+                    Set-CursorPosition 0 $currentY
+                    # Clear the line before writing new content
+                    Write-Host (" " * $Host.UI.RawUI.BufferSize.Width) -NoNewline
+                    Set-CursorPosition 0 $currentY
+                    Write-Host $line
+                    $currentY++
+                }
             }
             Start-Sleep -Milliseconds 50
         }
@@ -1083,9 +1122,6 @@ function Show-LiveUsageGraphs {
         Clear-Host
     }
 }
-
-# Example Call (if you were running this file directly):
-# Show-LiveContinuousGraph -RefreshRateSeconds 1 -GraphHeightParam 15 -GraphWidthParam 70
 
 function Get-ASCIIArt {
    param (
