@@ -851,6 +851,500 @@ function Get-DefaultAsciiArt {
     )
 }
 
+function Show-LiveUsageGraphs {
+    param (
+        [ValidateRange(0.1, 60)]
+        [double]$RefreshRateSeconds = 2,
+        [int]$GraphHeightParam = 20,
+        [int]$GraphWidthParam = 80
+    )
+    
+    $ESC = [char]27
+    $RESET = "$ESC[0m"
+    $BOLD = "$ESC[1m"
+    $MAGENTA = "$ESC[35m"
+    $CpuLineColor = "$ESC[36m" 
+    $RamLineColor = "$ESC[32m" 
+    $GpuUtilLineColor = "$ESC[31m" 
+    $VramUtilLineColor = "$ESC[33m"
+    $AxisColor = "$ESC[90m"
+    $GridColor = "$ESC[38;5;237m"
+    $CpuBarColor = $CpuLineColor
+    $RamBarColor = $RamLineColor
+    $GpuBarColor = $GpuUtilLineColor
+    $VramBarColor = $VramUtilLineColor
+    $ErrorColor = "$ESC[31m"
+    $GRAY = "$ESC[90m"
+
+    $maxHistoryLength = $GraphWidthParam * 2
+    [System.Collections.Generic.List[double]]$cpuHistory = New-Object System.Collections.Generic.List[double]
+    [System.Collections.Generic.List[double]]$ramHistory = New-Object System.Collections.Generic.List[double]
+    [System.Collections.Generic.List[double]]$gpuUtilHistory = New-Object System.Collections.Generic.List[double]
+    [System.Collections.Generic.List[double]]$vramUtilHistory = New-Object System.Collections.Generic.List[double]
+
+    $summaryBarWidth = 40
+
+    function Set-CursorPosition {
+        param ([int]$X, [int]$Y)
+        $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates $X, $Y
+    }
+
+    function Clear-Line {
+        param([int]$Y)
+        Set-CursorPosition 0 $Y
+        Write-Host (" " * $Host.UI.RawUI.BufferSize.Width) -NoNewline
+        Set-CursorPosition 0 $Y
+    }
+
+    function Format-UsageBar {
+        param (
+            [string]$Label,
+            [double]$Percentage,
+            [string]$AdditionalInfo = "",
+            [int]$PassedBarWidth
+        )
+        $Percentage = [Math]::Max(0, [Math]::Min(100, $Percentage))
+        $filledChars = [Math]::Round(($Percentage / 100) * $PassedBarWidth)
+        $emptyChars = $PassedBarWidth - $filledChars
+        
+        $barColorToUse = "$ESC[32m"
+        switch -Wildcard ($Label) {
+            "*CPU*" { $barColorToUse = $CpuBarColor }
+            "*RAM*" { $barColorToUse = $RamBarColor }
+            "*GPU*" { $barColorToUse = $GpuBarColor }
+            "*VRAM*" { $barColorToUse = $VramBarColor }
+        }
+        if ($Percentage -ge 90) { $barColorToUse = $ErrorColor } 
+        elseif ($Percentage -ge 70) { if($Label -notmatch "CPU"){ $barColorToUse = $VramUtilLineColor }} # Yellowish for warning
+        
+        $paddedLabel = "{0,-10}" -f $Label
+        $barSegment = "[" + ($barColorToUse + ("█" * $filledChars) + $RESET) + ("░" * $emptyChars) + "]"
+        $percentStr = "{0,5:N1}%" -f $Percentage
+        $result = "${paddedLabel}: ${barSegment} ${percentStr}"
+        if ($AdditionalInfo) { $result += " ($AdditionalInfo)" }
+        return $result
+    }
+
+    function Get-LiveCpuUsage {
+        try {
+            # $cpuLoad = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+            $cpuLoad = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+            return [Math]::Round($cpuLoad, 1)
+        } catch { return $null }
+    }
+
+    function Get-LiveRamUsage {
+        try {
+            $os = Get-CimInstance -ClassName Win32_OperatingSystem
+            $totalMemoryMB = [Math]::Round($os.TotalVisibleMemorySize / 1KB, 0)
+            $freeMemoryMB = [Math]::Round($os.FreePhysicalMemory / 1KB, 0)
+            $usedMemoryMB = $totalMemoryMB - $freeMemoryMB
+            $ramPercentUsed = if ($totalMemoryMB -gt 0) { [Math]::Round(($usedMemoryMB / $totalMemoryMB) * 100, 1) } else { 0 }
+            return @{ TotalMB = $totalMemoryMB; UsedMB = $usedMemoryMB; Percent = $ramPercentUsed }
+        } catch { return $null }
+    }
+
+    function Get-LiveNvidiaGpuUsage {
+        try {
+            $smiPath = if (Test-Path "C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe") {
+                "C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+            } elseif (Test-Path "C:\Windows\System32\nvidia-smi.exe") {
+                "C:\Windows\System32\nvidia-smi.exe"
+            } else { return $null }
+            
+            $output = & $smiPath --query-gpu=utilization.gpu,memory.total,memory.used --format=csv,noheader,nounits
+            if (-not $output) { return $null }
+            $stats = $output.Trim() -split ','
+            if ($stats.Count -lt 3) { return $null }
+
+            $gpuUtilization = [int]($stats[0].Trim())
+            $vramTotalMB = [int]$stats[1].Trim()
+            $vramUsedMB = [int]$stats[2].Trim()
+            $vramPercentUsed = if ($vramTotalMB -gt 0) { [Math]::Round(($vramUsedMB / $vramTotalMB) * 100, 1) } else { 0 }
+            
+            return @{ GPUUtilization = $gpuUtilization; VRAMTotalMB = $vramTotalMB; VRAMUsedMB = $vramUsedMB; VRAMPercent = $vramPercentUsed }
+        } catch { return $null }
+    }
+
+    function RenderCharacterLineGraph {
+        param (
+            [System.Collections.Generic.List[double]]$RenderCpuHistory,
+            [System.Collections.Generic.List[double]]$RenderRamHistory,
+            [System.Collections.Generic.List[double]]$RenderGpuUtilHistory,
+            [System.Collections.Generic.List[double]]$RenderVramUtilHistory,
+            [int]$RenderGraphHeight, [int]$RenderGraphWidth,
+            [string]$RenderCpuColor, [string]$RenderRamColor, [string]$RenderGpuUtilColor, [string]$RenderVramUtilColor,
+            [string]$RenderAxisColor, [string]$RenderGridColor, [string]$RenderResetColor
+        )
+
+        $outputGraphLines = [System.Collections.Generic.List[string]]::new()
+
+        $LineChars = @{
+            h = '─' # Horizontal line
+            v = '│' # Vertical line
+            ul = '┐' # Corner: up-left (connects to left, goes down)
+            ur = '┌' # Corner: up-right (connects to right, goes down)
+            dl = '┘' # Corner: down-left (connects to left, goes up)
+            dr = '└' # Corner: down-right (connects to right, goes up)
+            cross = '┼' # Intersection of horizontal and vertical
+            # T-junctions
+            t_down = '┬'  # Horizontal line, stem down
+            t_up = '┴'    # Horizontal line, stem up
+            t_left = '┤'  # Vertical line, stem left
+            t_right = '├' # Vertical line, stem right
+        }
+        $cpuPointChar = '*'; $ramPointChar = '+'; $gpuPointChar = '#'; $vramPointChar = '@'
+        $gridDotChar = '·'
+
+        $yAxisLabels = @{
+            0 = "100% "; ([Math]::Floor($RenderGraphHeight * 0.25)) = " 75% ";
+            ([Math]::Floor($RenderGraphHeight * 0.5)) = " 50% "; ([Math]::Floor($RenderGraphHeight * 0.75)) = " 25% ";
+            ($RenderGraphHeight -1) = "  0% "
+        }
+        $yAxisLabelWidth = 6
+
+        $canvas = New-Object 'string[,]' $RenderGraphHeight, $RenderGraphWidth
+        $canvasColors = New-Object 'string[,]' $RenderGraphHeight, $RenderGraphWidth
+
+        $horizontalGridPositions = @(0, [Math]::Floor($RenderGraphHeight*0.25), [Math]::Floor($RenderGraphHeight*0.5),
+                                     [Math]::Floor($RenderGraphHeight*0.75), ($RenderGraphHeight-1))
+
+        for ($y = 0; $y -lt $RenderGraphHeight; $y++) {
+            for ($x = 0; $x -lt $RenderGraphWidth; $x++) {
+                $canvas[$y, $x] = " "; $canvasColors[$y,$x] = $RenderResetColor
+                if ($horizontalGridPositions -contains $y -and ($x % 10 -eq 0)) {
+                    $canvas[$y, $x] = $gridDotChar; $canvasColors[$y,$x] = $RenderGridColor
+                }
+            }
+        }
+
+        function Set-CanvasCharScoped {
+            param ([int]$y, [int]$x, [string]$charToDraw, [string]$colorForChar)
+
+            if ($y -lt 0 -or $y -ge $RenderGraphHeight -or $x -lt 0 -or $x -ge $RenderGraphWidth) {
+                return
+            }
+
+            $existingChar = $canvas[$y, $x]
+            $existingColor = $canvasColors[$y, $x]
+            $isBlankOrGrid = ($existingChar -eq " " -or $existingChar -eq $gridDotChar)
+
+            if ($isBlankOrGrid) {
+                $canvas[$y, $x] = $charToDraw
+                $canvasColors[$y, $x] = $colorForChar
+                return
+            }
+
+            $finalChar = $charToDraw
+            $finalColor = $colorForChar
+            $merged = $false
+
+            if ($charToDraw -eq $LineChars.h) {
+                $merged = $true
+                switch ($existingChar) {
+                    $LineChars.v      { $finalChar = $LineChars.cross;   $finalColor = $RenderAxisColor; break } # V + H -> ┼ (neutral)
+                    $LineChars.ul     { $finalChar = $LineChars.t_down;  break } # ┐ + H -> ┬
+                    $LineChars.ur     { $finalChar = $LineChars.t_down;  break } # ┌ + H -> ┬
+                    $LineChars.dl     { $finalChar = $LineChars.t_up;    break } # ┘ + H -> ┴
+                    $LineChars.dr     { $finalChar = $LineChars.t_up;    break } # └ + H -> ┴
+                    $LineChars.t_left { $finalChar = $LineChars.cross;  break } # ┤ + H -> ┼
+                    $LineChars.t_right { $finalChar = $LineChars.cross;  break } # ├ + H -> ┼
+                    $LineChars.h      { $finalChar = $LineChars.h;      break; }
+                    $LineChars.t_down { $finalChar = $LineChars.t_down; break; }
+                    $LineChars.t_up   { $finalChar = $LineChars.t_up;   break; }
+                    $LineChars.cross  { $finalChar = $LineChars.cross;  break; }
+                    default           { $merged = $false }
+                }
+            }
+            
+            elseif ($charToDraw -eq $LineChars.v) {
+                $merged = $true
+                switch ($existingChar) {
+                    $LineChars.h      { $finalChar = $LineChars.cross;    $finalColor = $RenderAxisColor; break } # H + V -> ┼ (neutral)
+                    $LineChars.ul     { $finalChar = $LineChars.t_left;   break } # ┐ + V -> ┤
+                    $LineChars.ur     { $finalChar = $LineChars.t_right;  break } # ┌ + V -> ├
+                    $LineChars.dl     { $finalChar = $LineChars.t_left;   break } # ┘ + V -> ┤
+                    $LineChars.dr     { $finalChar = $LineChars.t_right;  break } # └ + V -> ├
+                    $LineChars.t_down { $finalChar = $LineChars.cross;   break } # ┬ + V -> ┼
+                    $LineChars.t_up   { $finalChar = $LineChars.cross;   break } # ┴ + V -> ┼
+                    $LineChars.v       { $finalChar = $LineChars.v;       break; }
+                    $LineChars.t_left  { $finalChar = $LineChars.t_left;  break; }
+                    $LineChars.t_right { $finalChar = $LineChars.t_right; break; }
+                    $LineChars.cross   { $finalChar = $LineChars.cross;   break; }
+                    default            { $merged = $false }
+                }
+            }
+
+            elseif (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur) -or `
+                    ($charToDraw -eq $LineChars.dl) -or ($charToDraw -eq $LineChars.dr)) {
+                if ($existingChar -eq $LineChars.h) {
+                    if (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur)) { $finalChar = $LineChars.t_down }
+                    else { $finalChar = $LineChars.t_up }
+                    $merged = $true
+                }
+                elseif ($existingChar -eq $LineChars.v) {
+                    if (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.dl)) { $finalChar = $LineChars.t_left }
+                    else { $finalChar = $LineChars.t_right }
+                    $merged = $true
+                }
+            }
+
+            if (-not $merged) {
+                $finalChar = $charToDraw
+            }
+
+            $canvas[$y, $x] = $finalChar
+            $canvasColors[$y, $x] = $finalColor
+        }
+
+        function PlotSingleMetricLine {
+            param (
+                [System.Collections.Generic.List[double]]$HistoryToPlot,
+                [string]$MetricLineColor,
+                [int]$PlotGraphHeight, 
+                [int]$PlotGraphWidth
+            )
+            
+            $validPoints = @()
+            
+            for ($x = 0; $x -lt $PlotGraphWidth; $x++) {
+                $histIndex = $HistoryToPlot.Count - $PlotGraphWidth + $x
+                if ($histIndex -ge 0 -and $histIndex -lt $HistoryToPlot.Count) {
+                    $value = $HistoryToPlot[$histIndex]
+                    if ($null -ne $value) {
+                        $y = [Math]::Floor(($PlotGraphHeight - 1) * (1 - ($value / 100.0)))
+                        $y = [Math]::Max(0, [Math]::Min($PlotGraphHeight - 1, $y))
+                        $validPoints += @{X = $x; Y = $y; Value = $value}
+                    }
+                }
+            }
+            
+            if ($validPoints.Count -eq 0) { return }
+            
+            Set-CanvasCharScoped $validPoints[0].Y $validPoints[0].X $LineChars.h $MetricLineColor
+            
+            for ($i = 1; $i -lt $validPoints.Count; $i++) {
+                $current = $validPoints[$i]
+                $previous = $validPoints[$i-1]
+                
+                if (($current.X - $previous.X) -gt 1) {
+                    Set-CanvasCharScoped $current.Y $current.X $LineChars.h $MetricLineColor
+                    continue
+                }
+                
+                if ($current.Y -eq $previous.Y) {
+                    Set-CanvasCharScoped $current.Y $current.X $LineChars.h $MetricLineColor
+                }
+                else {
+                    $isRising = $current.Y -lt $previous.Y
+                    
+                    if ($isRising) {
+                        Set-CanvasCharScoped $previous.Y $current.X $LineChars.dl $MetricLineColor
+                        
+                        for ($y_vert = ($current.Y + 1); $y_vert -lt $previous.Y; $y_vert++) {
+                            Set-CanvasCharScoped $y_vert $current.X $LineChars.v $MetricLineColor
+                        }
+                        
+                        Set-CanvasCharScoped $current.Y $current.X $LineChars.ur $MetricLineColor
+                    }
+                    else {
+                        Set-CanvasCharScoped $previous.Y $current.X $LineChars.ul $MetricLineColor
+                        
+                        for ($y_vert = ($previous.Y + 1); $y_vert -lt $current.Y; $y_vert++) {
+                            Set-CanvasCharScoped $y_vert $current.X $LineChars.v $MetricLineColor
+                        }
+                        
+                        Set-CanvasCharScoped $current.Y $current.X $LineChars.dr $MetricLineColor
+                    }
+                }
+            }
+        }
+
+        PlotSingleMetricLine $RenderVramUtilHistory $RenderVramUtilColor $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderGpuUtilHistory $RenderGpuUtilColor $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderRamHistory $RenderRamColor $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderCpuHistory $RenderCpuColor $RenderGraphHeight $RenderGraphWidth
+
+        for ($y = 0; $y -lt $RenderGraphHeight; $y++) {
+            $line = ""; $yLabel = $yAxisLabels[$y]
+            if ($yLabel) { $line += "$RenderAxisColor$($yLabel.PadRight($yAxisLabelWidth))$RenderResetColor" }
+            else { $line += " " * $yAxisLabelWidth }
+
+            for ($x = 0; $x -lt $RenderGraphWidth; $x++) {
+                $charToPrint = $canvas[$y, $x]; $colorForChar = $canvasColors[$y, $x]
+                if ($colorForChar -eq $RenderResetColor -and $charToPrint -ne " " -and $charToPrint -eq $gridDotChar){
+                    $colorForChar = $RenderGridColor
+                } elseif ($colorForChar -eq $RenderResetColor -and $charToPrint -ne " ") {
+                     $colorForChar = $RenderAxisColor
+                }
+                $line += "$colorForChar$charToPrint$RenderResetColor"
+            }
+            $outputGraphLines.Add($line)
+        }
+
+        $xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.dl)" + ($LineChars.h * ($RenderGraphWidth-2)) + "$($LineChars.dr)$RenderResetColor"
+        if ($RenderGraphWidth -lt 2) {$xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.h * $RenderGraphWidth)$RenderResetColor"} # Handle very small widths
+        $outputGraphLines.Add($xAxisLine)
+
+        $timeLabelsLine = (" " * $yAxisLabelWidth)
+        $lbl_neg_full = "-$($RenderGraphWidth)s"; $lbl_neg_half = "-$([int]($RenderGraphWidth/2))s"; $lbl_zero = "0s "
+        $timeLabelLength = $RenderGraphWidth
+        $availableSpaceForLabels = $timeLabelLength - $lbl_zero.Length
+        $pos_neg_full = 0
+        $pos_neg_half = [Math]::Max(0, [int]($availableSpaceForLabels / 2) - [int]($lbl_neg_half.Length / 2))
+        $pos_zero = [Math]::Max(0, $availableSpaceForLabels - $lbl_zero.Length)
+
+        $tempTimeLine = (" " * $timeLabelLength)
+        function InsertString {param($original, $insert, $position)
+            return $original.Substring(0, $position) + $insert + $original.Substring($position + $insert.Length)
+        }
+        if (($pos_neg_full + $lbl_neg_full.Length) -le $timeLabelLength) {
+            $tempTimeLine = InsertString $tempTimeLine $lbl_neg_full $pos_neg_full
+        }
+        if (($pos_neg_half + $lbl_neg_half.Length) -le $timeLabelLength) {
+             $tempTimeLine = InsertString $tempTimeLine $lbl_neg_half $pos_neg_half
+        }
+        $tempTimeLine = InsertString $tempTimeLine $lbl_zero ([Math]::Max(0, $timeLabelLength - $lbl_zero.Length))
+
+        $timeLabelsLine += "$RenderAxisColor$tempTimeLine$RenderResetColor"
+        $outputGraphLines.Add($timeLabelsLine)
+
+        $legend = (" " * $yAxisLabelWidth) + "$RenderCpuColor$($cpuPointChar) CPU$RenderResetColor  " +
+                                          "$RenderRamColor$($ramPointChar) RAM$RenderResetColor  " +
+                                          "$RenderGpuUtilColor$($gpuPointChar) GPU$RenderResetColor  " +
+                                          "$RenderVramUtilColor$($vramPointChar) VRAM$RenderResetColor"
+        $outputGraphLines.Add($legend)
+        return $outputGraphLines
+    }
+
+    try {
+        [Console]::CursorVisible = $false
+        $lastUpdateTime = [DateTime]::MinValue
+        $smiPath1 = "C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+        $smiPath2 = "C:\Windows\System32\nvidia-smi.exe"
+        $nvidiaSmiPathFound = (Test-Path $smiPath1) -or (Test-Path $smiPath2)
+        $continueLoop = $true
+        
+        $psHost = Get-Host
+        $originalBufferWidth = $psHost.UI.RawUI.BufferSize.Width
+        $originalBufferHeight = $psHost.UI.RawUI.BufferSize.Height
+        $requiredBufferWidth = $GraphWidthParam + 15
+        $requiredBufferHeight = $GraphHeightParam + 15
+        if ($originalBufferWidth -lt $requiredBufferWidth -or $originalBufferHeight -lt $requiredBufferHeight) {
+            try {
+                $newBufferSize = $psHost.UI.RawUI.BufferSize
+                $newBufferSize.Width = [Math]::Max($originalBufferWidth, $requiredBufferWidth)
+                $newBufferSize.Height = [Math]::Max($originalBufferHeight, $requiredBufferHeight)
+                $psHost.UI.RawUI.BufferSize = $newBufferSize
+            } catch {
+                Write-Warning "Could not resize console buffer. Graph may not display optimally."
+            }
+        }
+        
+        $totalDisplayLines = $GraphHeightParam + 12 
+        
+        Clear-Host
+        $titleLine = "${BOLD}${MAGENTA}Live System Character Graph (Press 'q' or ESC to quit)${RESET}"
+        Write-Host $titleLine
+        Write-Host ("-" * ($GraphWidthParam + 15))
+        
+        for ($i = 0; $i -lt $totalDisplayLines; $i++) {
+            Write-Host ""
+        }
+        
+        $startY = 2
+        
+        while ($continueLoop) {
+            $now = Get-Date
+            
+            if ([Console]::KeyAvailable) {
+                $key = [Console]::ReadKey($true) 
+                if ($key.KeyChar -eq 'q' -or $key.KeyChar -eq 'Q' -or $key.Key -eq 'Escape') {
+                    $continueLoop = $false; break
+                }
+            }
+            
+            if (($now - $lastUpdateTime).TotalSeconds -ge $RefreshRateSeconds) {
+                $lastUpdateTime = $now
+                
+                $cpuUsageVal = Get-LiveCpuUsage
+                $ramUsageInfoVal = Get-LiveRamUsage
+                $gpuUsageInfoVal = if ($nvidiaSmiPathFound) { Get-LiveNvidiaGpuUsage } else { $null }
+
+                $cpuHistory.Add($cpuUsageVal)
+                if ($ramUsageInfoVal) { $ramHistory.Add($ramUsageInfoVal.Percent) } else { $ramHistory.Add($null) }
+                if ($gpuUsageInfoVal) { 
+                    $gpuUtilHistory.Add($gpuUsageInfoVal.GPUUtilization)
+                    $vramUtilHistory.Add($gpuUsageInfoVal.VRAMPercent)
+                } else {
+                    $gpuUtilHistory.Add($null); $vramUtilHistory.Add($null)
+                }
+
+                foreach($arr in @($cpuHistory, $ramHistory, $gpuUtilHistory, $vramUtilHistory)) {
+                    while ($arr.Count -gt $maxHistoryLength) { $arr.RemoveAt(0) }
+                }
+
+                $displayLines = [System.Collections.Generic.List[string]]::new()
+
+                $graphCanvasLines = RenderCharacterLineGraph -RenderCpuHistory $cpuHistory `
+                    -RenderRamHistory $ramHistory -RenderGpuUtilHistory $gpuUtilHistory -RenderVramUtilHistory $vramUtilHistory `
+                    -RenderGraphHeight $GraphHeightParam -RenderGraphWidth $GraphWidthParam `
+                    -RenderCpuColor $CpuLineColor -RenderRamColor $RamLineColor -RenderGpuUtilColor $GpuUtilLineColor -RenderVramUtilColor $VramUtilLineColor `
+                    -RenderAxisColor $AxisColor -RenderGridColor $GridColor -RenderResetColor $RESET
+                
+                foreach ($graphLine in $graphCanvasLines) {
+                    $displayLines.Add($graphLine)
+                }
+
+                $displayLines.Add("") 
+
+                $displayLines.Add("${BOLD}Current Usage:${RESET}")
+                if ($null -ne $cpuUsageVal) { $displayLines.Add((Format-UsageBar -Label "CPU" -Percentage $cpuUsageVal -PassedBarWidth $summaryBarWidth)) } 
+                else { $displayLines.Add("CPU:      ${ErrorColor}Error fetching data${RESET}") }
+                
+                if ($null -ne $ramUsageInfoVal) { $displayLines.Add((Format-UsageBar -Label "RAM" -Percentage $ramUsageInfoVal.Percent -AdditionalInfo "$($ramUsageInfoVal.UsedMB)MB/$($ramUsageInfoVal.TotalMB)MB" -PassedBarWidth $summaryBarWidth)) } 
+                else { $displayLines.Add("RAM:      ${ErrorColor}Error fetching data${RESET}") }
+                
+                if ($nvidiaSmiPathFound) {
+                    if ($null -ne $gpuUsageInfoVal) {
+                        $displayLines.Add((Format-UsageBar -Label "GPU Util" -Percentage $gpuUsageInfoVal.GPUUtilization -PassedBarWidth $summaryBarWidth))
+                        $displayLines.Add((Format-UsageBar -Label "VRAM" -Percentage $gpuUsageInfoVal.VRAMPercent -AdditionalInfo "$($gpuUsageInfoVal.VRAMUsedMB)MB/$($gpuUsageInfoVal.VRAMTotalMB)MB" -PassedBarWidth $summaryBarWidth))
+                    } else {
+                        $displayLines.Add("GPU Util: ${ErrorColor}NVIDIA SMI Error${RESET}")
+                        $displayLines.Add("VRAM:     ${ErrorColor}NVIDIA SMI Error${RESET}")
+                    }
+                } else {
+                    $displayLines.Add("GPU Util: ${GRAY}nvidia-smi N/A${RESET}")
+                    $displayLines.Add("VRAM:     ${GRAY}nvidia-smi N/A${RESET}")
+                }
+                
+                $displayLines.Add(("-" * ($GraphWidthParam + 15)))
+                $displayLines.Add("${GRAY}Updated: $(Get-Date -Format 'HH:mm:ss')${RESET} | Refresh: ${RefreshRateSeconds}s")
+
+                $currentY = $startY
+                foreach ($line in $displayLines) {
+                    Set-CursorPosition 0 $currentY
+                    Write-Host (" " * $Host.UI.RawUI.BufferSize.Width) -NoNewline
+                    Set-CursorPosition 0 $currentY
+                    Write-Host $line
+                    $currentY++
+                }
+            }
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    finally {
+        [Console]::CursorVisible = $true
+        try {
+            $newBufferSize = $psHost.UI.RawUI.BufferSize
+            $newBufferSize.Width = $originalBufferWidth
+            $newBufferSize.Height = $originalBufferHeight
+            $psHost.UI.RawUI.BufferSize = $newBufferSize
+        } catch {}
+        Clear-Host
+    }
+}
+
 function Get-ASCIIArt {
     param (
         [string]$CustomArtPath,
@@ -984,6 +1478,7 @@ function Show-Usage {
     Write-Host "  -nocache             Disable caching and force fresh data collection." -ForegroundColor White
     Write-Host "  -minimal             Display a minimal view with only essential system information." -ForegroundColor White
     Write-Host "  -benchmark           Run a system benchmark and display results." -ForegroundColor White
+    Write-Host "  -live                Display live CPU, RAM, GPU, and VRAM usage graphs." -ForegroundColor White
     Write-Host "  -reset               Reset all configuration files and caches to defaults." -ForegroundColor White
     Write-Host "  -help                Display this help message." -ForegroundColor White
     Write-Host ""
@@ -1050,7 +1545,10 @@ function neofetch {
         [switch]$init = $false,
         
         [Parameter(Mandatory=$false)]
-        [switch]$Force = $false
+        [switch]$Force = $false,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$live = $false
     )
 
     $ESC = [char]27
@@ -1075,7 +1573,7 @@ function neofetch {
 
     if ($isFirstRun -and -not ($help -or $changes -or $defaultart -or $maxThreads -or $defaultthreads -or $nocache -or 
         $cacheExpiration -or $defaultcache -or $profileName -or $defaultprofile -or $minimal -or $benchmark -or 
-        $reload -or $asciiart)) {
+        $reload -or $asciiart -or $live)) {
         Write-Host "${BOLD}${CYAN}First run detected!${RESET} Starting initial setup..." -ForegroundColor Cyan
         Start-Sleep -Seconds 1
         $init = $true
@@ -1148,6 +1646,11 @@ function neofetch {
         } else {
             Write-Host "Threads were already set to default" -ForegroundColor Cyan
         }
+        return
+    }
+
+    if ($live) {
+        Show-LiveUsageGraphs
         return
     }
 

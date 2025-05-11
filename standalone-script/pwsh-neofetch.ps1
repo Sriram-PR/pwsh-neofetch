@@ -747,42 +747,36 @@ function Show-LiveUsageGraphs {
         [int]$GraphWidthParam = 80
     )
     
-    # --- ANSI Color Codes ---
     $ESC = [char]27
     $RESET = "$ESC[0m"
     $BOLD = "$ESC[1m"
     $MAGENTA = "$ESC[35m"
-    # Colors for graph lines & elements
-    $CpuLineColor = "$ESC[36m"    # Cyan
-    $RamLineColor = "$ESC[32m"    # Green
-    $GpuUtilLineColor = "$ESC[31m" # Red
-    $VramUtilLineColor = "$ESC[33m"# Yellow
-    $AxisColor = "$ESC[90m"       # Bright Black (Gray) for Axes
-    $GridColor = "$ESC[38;5;237m" # Dark Gray for Grid dots
-    # Colors for summary bars (can reuse line colors or define separately)
+    $CpuLineColor = "$ESC[36m" 
+    $RamLineColor = "$ESC[32m" 
+    $GpuUtilLineColor = "$ESC[31m" 
+    $VramUtilLineColor = "$ESC[33m"
+    $AxisColor = "$ESC[90m"
+    $GridColor = "$ESC[38;5;237m"
     $CpuBarColor = $CpuLineColor
     $RamBarColor = $RamLineColor
     $GpuBarColor = $GpuUtilLineColor
     $VramBarColor = $VramUtilLineColor
-    $ErrorColor = "$ESC[31m" # Red for "Error fetching data"
+    $ErrorColor = "$ESC[31m"
     $GRAY = "$ESC[90m"
 
-    # --- Graph and History Setup ---
-    $maxHistoryLength = $GraphWidthParam * 2  # Keep more history than displayed width for smooth scroll
+    $maxHistoryLength = $GraphWidthParam * 2
     [System.Collections.Generic.List[double]]$cpuHistory = New-Object System.Collections.Generic.List[double]
     [System.Collections.Generic.List[double]]$ramHistory = New-Object System.Collections.Generic.List[double]
     [System.Collections.Generic.List[double]]$gpuUtilHistory = New-Object System.Collections.Generic.List[double]
     [System.Collections.Generic.List[double]]$vramUtilHistory = New-Object System.Collections.Generic.List[double]
 
-    $summaryBarWidth = 40 # Width for the percentage bars below the graph
+    $summaryBarWidth = 40
 
-    # --- NESTED HELPER FUNCTION: Set-CursorPosition (to replace Clear-Host) ---
     function Set-CursorPosition {
         param ([int]$X, [int]$Y)
         $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates $X, $Y
     }
 
-    # --- NESTED HELPER FUNCTION: Clear-Line ---
     function Clear-Line {
         param([int]$Y)
         Set-CursorPosition 0 $Y
@@ -790,26 +784,24 @@ function Show-LiveUsageGraphs {
         Set-CursorPosition 0 $Y
     }
 
-    # --- NESTED HELPER FUNCTION: Format-UsageBar (for summary) ---
     function Format-UsageBar {
         param (
             [string]$Label,
             [double]$Percentage,
             [string]$AdditionalInfo = "",
-            [int]$PassedBarWidth # Use passed width from parent
+            [int]$PassedBarWidth
         )
         $Percentage = [Math]::Max(0, [Math]::Min(100, $Percentage))
         $filledChars = [Math]::Round(($Percentage / 100) * $PassedBarWidth)
         $emptyChars = $PassedBarWidth - $filledChars
         
-        $barColorToUse = "$ESC[32m" # Default Green
+        $barColorToUse = "$ESC[32m"
         switch -Wildcard ($Label) {
             "*CPU*" { $barColorToUse = $CpuBarColor }
             "*RAM*" { $barColorToUse = $RamBarColor }
             "*GPU*" { $barColorToUse = $GpuBarColor }
             "*VRAM*" { $barColorToUse = $VramBarColor }
         }
-        # Override for high usage (optional)
         if ($Percentage -ge 90) { $barColorToUse = $ErrorColor } 
         elseif ($Percentage -ge 70) { if($Label -notmatch "CPU"){ $barColorToUse = $VramUtilLineColor }} # Yellowish for warning
         
@@ -821,7 +813,6 @@ function Show-LiveUsageGraphs {
         return $result
     }
 
-    # --- NESTED HELPER FUNCTION: Get-LiveCpuUsage ---
     function Get-LiveCpuUsage {
         try {
             # $cpuLoad = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
@@ -830,7 +821,6 @@ function Show-LiveUsageGraphs {
         } catch { return $null }
     }
 
-    # --- NESTED HELPER FUNCTION: Get-LiveRamUsage ---
     function Get-LiveRamUsage {
         try {
             $os = Get-CimInstance -ClassName Win32_OperatingSystem
@@ -842,7 +832,6 @@ function Show-LiveUsageGraphs {
         } catch { return $null }
     }
 
-    # --- NESTED HELPER FUNCTION: Get-LiveNvidiaGpuUsage ---
     function Get-LiveNvidiaGpuUsage {
         try {
             $smiPath = if (Test-Path "C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe") {
@@ -865,35 +854,48 @@ function Show-LiveUsageGraphs {
         } catch { return $null }
     }
 
-    # --- NESTED HELPER FUNCTION: Render-CharacterLineGraph ---
-    function Render-CharacterLineGraph {
+    function RenderCharacterLineGraph {
         param (
             [System.Collections.Generic.List[double]]$RenderCpuHistory,
             [System.Collections.Generic.List[double]]$RenderRamHistory,
             [System.Collections.Generic.List[double]]$RenderGpuUtilHistory,
             [System.Collections.Generic.List[double]]$RenderVramUtilHistory,
-            [int]$RenderGraphHeight, [int]$RenderGraphWidth, # From parent's GraphHeightParam/WidthParam
+            [int]$RenderGraphHeight, [int]$RenderGraphWidth,
             [string]$RenderCpuColor, [string]$RenderRamColor, [string]$RenderGpuUtilColor, [string]$RenderVramUtilColor,
             [string]$RenderAxisColor, [string]$RenderGridColor, [string]$RenderResetColor
         )
 
         $outputGraphLines = [System.Collections.Generic.List[string]]::new()
 
-        $cpuPointChar = '*'; $ramPointChar = '+'; $gpuPointChar = '#'; $vramPointChar = '$'
-        $intersectionChar = '╳'; $verticalLineChar = '│'; $gridDotChar = '·'
+        $LineChars = @{
+            h = '─' # Horizontal line
+            v = '│' # Vertical line
+            ul = '┐' # Corner: up-left (connects to left, goes down)
+            ur = '┌' # Corner: up-right (connects to right, goes down)
+            dl = '┘' # Corner: down-left (connects to left, goes up)
+            dr = '└' # Corner: down-right (connects to right, goes up)
+            cross = '┼' # Intersection of horizontal and vertical
+            # T-junctions
+            t_down = '┬'  # Horizontal line, stem down
+            t_up = '┴'    # Horizontal line, stem up
+            t_left = '┤'  # Vertical line, stem left
+            t_right = '├' # Vertical line, stem right
+        }
+        $cpuPointChar = '*'; $ramPointChar = '+'; $gpuPointChar = '#'; $vramPointChar = '@'
+        $gridDotChar = '·'
 
         $yAxisLabels = @{
             0 = "100% "; ([Math]::Floor($RenderGraphHeight * 0.25)) = " 75% ";
             ([Math]::Floor($RenderGraphHeight * 0.5)) = " 50% "; ([Math]::Floor($RenderGraphHeight * 0.75)) = " 25% ";
             ($RenderGraphHeight -1) = "  0% "
         }
-        $yAxisLabelWidth = 6 
+        $yAxisLabelWidth = 6
 
         $canvas = New-Object 'string[,]' $RenderGraphHeight, $RenderGraphWidth
         $canvasColors = New-Object 'string[,]' $RenderGraphHeight, $RenderGraphWidth
 
-        $horizontalGridPositions = @(0, [Math]::Floor($RenderGraphHeight*0.25), [Math]::Floor($RenderGraphHeight*0.5), 
-                                   [Math]::Floor($RenderGraphHeight*0.75), ($RenderGraphHeight-1))
+        $horizontalGridPositions = @(0, [Math]::Floor($RenderGraphHeight*0.25), [Math]::Floor($RenderGraphHeight*0.5),
+                                     [Math]::Floor($RenderGraphHeight*0.75), ($RenderGraphHeight-1))
 
         for ($y = 0; $y -lt $RenderGraphHeight; $y++) {
             for ($x = 0; $x -lt $RenderGraphWidth; $x++) {
@@ -904,87 +906,205 @@ function Show-LiveUsageGraphs {
             }
         }
 
-        function Plot-SingleMetricLine { # Nested further for Render-CharacterLineGraph
+        function Set-CanvasCharScoped {
+            param ([int]$y, [int]$x, [string]$charToDraw, [string]$colorForChar)
+
+            if ($y -lt 0 -or $y -ge $RenderGraphHeight -or $x -lt 0 -or $x -ge $RenderGraphWidth) {
+                return
+            }
+
+            $existingChar = $canvas[$y, $x]
+            $existingColor = $canvasColors[$y, $x]
+            $isBlankOrGrid = ($existingChar -eq " " -or $existingChar -eq $gridDotChar)
+
+            if ($isBlankOrGrid) {
+                $canvas[$y, $x] = $charToDraw
+                $canvasColors[$y, $x] = $colorForChar
+                return
+            }
+
+            $finalChar = $charToDraw
+            $finalColor = $colorForChar
+            $merged = $false
+
+            if ($charToDraw -eq $LineChars.h) {
+                $merged = $true
+                switch ($existingChar) {
+                    $LineChars.v      { $finalChar = $LineChars.cross;   $finalColor = $RenderAxisColor; break } # V + H -> ┼ (neutral)
+                    $LineChars.ul     { $finalChar = $LineChars.t_down;  break } # ┐ + H -> ┬
+                    $LineChars.ur     { $finalChar = $LineChars.t_down;  break } # ┌ + H -> ┬
+                    $LineChars.dl     { $finalChar = $LineChars.t_up;    break } # ┘ + H -> ┴
+                    $LineChars.dr     { $finalChar = $LineChars.t_up;    break } # └ + H -> ┴
+                    $LineChars.t_left { $finalChar = $LineChars.cross;  break } # ┤ + H -> ┼
+                    $LineChars.t_right { $finalChar = $LineChars.cross;  break } # ├ + H -> ┼
+                    $LineChars.h      { $finalChar = $LineChars.h;      break; }
+                    $LineChars.t_down { $finalChar = $LineChars.t_down; break; }
+                    $LineChars.t_up   { $finalChar = $LineChars.t_up;   break; }
+                    $LineChars.cross  { $finalChar = $LineChars.cross;  break; }
+                    default           { $merged = $false }
+                }
+            }
+            
+            elseif ($charToDraw -eq $LineChars.v) {
+                $merged = $true
+                switch ($existingChar) {
+                    $LineChars.h      { $finalChar = $LineChars.cross;    $finalColor = $RenderAxisColor; break } # H + V -> ┼ (neutral)
+                    $LineChars.ul     { $finalChar = $LineChars.t_left;   break } # ┐ + V -> ┤
+                    $LineChars.ur     { $finalChar = $LineChars.t_right;  break } # ┌ + V -> ├
+                    $LineChars.dl     { $finalChar = $LineChars.t_left;   break } # ┘ + V -> ┤
+                    $LineChars.dr     { $finalChar = $LineChars.t_right;  break } # └ + V -> ├
+                    $LineChars.t_down { $finalChar = $LineChars.cross;   break } # ┬ + V -> ┼
+                    $LineChars.t_up   { $finalChar = $LineChars.cross;   break } # ┴ + V -> ┼
+                    $LineChars.v       { $finalChar = $LineChars.v;       break; }
+                    $LineChars.t_left  { $finalChar = $LineChars.t_left;  break; }
+                    $LineChars.t_right { $finalChar = $LineChars.t_right; break; }
+                    $LineChars.cross   { $finalChar = $LineChars.cross;   break; }
+                    default            { $merged = $false }
+                }
+            }
+
+            elseif (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur) -or `
+                    ($charToDraw -eq $LineChars.dl) -or ($charToDraw -eq $LineChars.dr)) {
+                if ($existingChar -eq $LineChars.h) {
+                    if (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur)) { $finalChar = $LineChars.t_down }
+                    else { $finalChar = $LineChars.t_up }
+                    $merged = $true
+                }
+                elseif ($existingChar -eq $LineChars.v) {
+                    if (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.dl)) { $finalChar = $LineChars.t_left }
+                    else { $finalChar = $LineChars.t_right }
+                    $merged = $true
+                }
+            }
+
+            if (-not $merged) {
+                $finalChar = $charToDraw
+            }
+
+            $canvas[$y, $x] = $finalChar
+            $canvasColors[$y, $x] = $finalColor
+        }
+
+        function PlotSingleMetricLine {
             param (
                 [System.Collections.Generic.List[double]]$HistoryToPlot,
-                [string]$MetricPointChar, [string]$MetricLineColor,
-                # Pass canvas by reference-like behavior (modifying parent scope arrays)
-                $CanvasRef, $CanvasColorsRef, 
-                [int]$PlotGraphHeight, [int]$PlotGraphWidth
+                [string]$MetricLineColor,
+                [int]$PlotGraphHeight, 
+                [int]$PlotGraphWidth
             )
-            $last_y_coord = $null
-            for ($x_coord = 0; $x_coord -lt $PlotGraphWidth; $x_coord++) {
-                $hist_idx = $HistoryToPlot.Count - $PlotGraphWidth + $x_coord
-                if ($hist_idx -lt 0 -or $hist_idx -ge $HistoryToPlot.Count) { $last_y_coord = $null; continue }
-
-                $value_percent = $HistoryToPlot[$hist_idx]
-                if ($value_percent -eq $null) { $last_y_coord = $null; continue }
-
-                $y_coord = [Math]::Floor(($PlotGraphHeight - 1) * (1 - ($value_percent / 100.0)))
-                $y_coord = [Math]::Max(0, [Math]::Min($PlotGraphHeight - 1, $y_coord))
-
-                if ($CanvasRef[$y_coord, $x_coord] -eq " " -or $CanvasRef[$y_coord, $x_coord] -eq $gridDotChar) {
-                    $CanvasRef[$y_coord, $x_coord] = $MetricPointChar
-                    $CanvasColorsRef[$y_coord, $x_coord] = $MetricLineColor
-                } else { 
-                    $CanvasRef[$y_coord, $x_coord] = $intersectionChar
-                    $CanvasColorsRef[$y_coord, $x_coord] = $RenderAxisColor # Neutral intersection
-                }
-
-                if ($last_y_coord -ne $null) {
-                    $y_start = [Math]::Min($last_y_coord, $y_coord); $y_end = [Math]::Max($last_y_coord, $y_coord)
-                    for ($line_y = $y_start; $line_y -le $y_end; $line_y++) {
-                        if ($line_y -eq $y_coord) { continue } # Don't overwrite current point with line
-                        if ($CanvasRef[$line_y, $x_coord] -eq " " -or $CanvasRef[$line_y, $x_coord] -eq $gridDotChar) {
-                            $CanvasRef[$line_y, $x_coord] = $verticalLineChar
-                            $CanvasColorsRef[$line_y, $x_coord] = $MetricLineColor
-                        } elseif ($CanvasRef[$line_y, $x_coord] -eq $verticalLineChar) {
-                             $CanvasColorsRef[$line_y, $x_coord] = $MetricLineColor # Let last color win
-                        }
+            
+            $validPoints = @()
+            
+            for ($x = 0; $x -lt $PlotGraphWidth; $x++) {
+                $histIndex = $HistoryToPlot.Count - $PlotGraphWidth + $x
+                if ($histIndex -ge 0 -and $histIndex -lt $HistoryToPlot.Count) {
+                    $value = $HistoryToPlot[$histIndex]
+                    if ($null -ne $value) {
+                        $y = [Math]::Floor(($PlotGraphHeight - 1) * (1 - ($value / 100.0)))
+                        $y = [Math]::Max(0, [Math]::Min($PlotGraphHeight - 1, $y))
+                        $validPoints += @{X = $x; Y = $y; Value = $value}
                     }
                 }
-                $last_y_coord = $y_coord
+            }
+            
+            if ($validPoints.Count -eq 0) { return }
+            
+            Set-CanvasCharScoped $validPoints[0].Y $validPoints[0].X $LineChars.h $MetricLineColor
+            
+            for ($i = 1; $i -lt $validPoints.Count; $i++) {
+                $current = $validPoints[$i]
+                $previous = $validPoints[$i-1]
+                
+                if (($current.X - $previous.X) -gt 1) {
+                    Set-CanvasCharScoped $current.Y $current.X $LineChars.h $MetricLineColor
+                    continue
+                }
+                
+                if ($current.Y -eq $previous.Y) {
+                    Set-CanvasCharScoped $current.Y $current.X $LineChars.h $MetricLineColor
+                }
+                else {
+                    $isRising = $current.Y -lt $previous.Y
+                    
+                    if ($isRising) {
+                        Set-CanvasCharScoped $previous.Y $current.X $LineChars.dl $MetricLineColor
+                        
+                        for ($y_vert = ($current.Y + 1); $y_vert -lt $previous.Y; $y_vert++) {
+                            Set-CanvasCharScoped $y_vert $current.X $LineChars.v $MetricLineColor
+                        }
+                        
+                        Set-CanvasCharScoped $current.Y $current.X $LineChars.ur $MetricLineColor
+                    }
+                    else {
+                        Set-CanvasCharScoped $previous.Y $current.X $LineChars.ul $MetricLineColor
+                        
+                        for ($y_vert = ($previous.Y + 1); $y_vert -lt $current.Y; $y_vert++) {
+                            Set-CanvasCharScoped $y_vert $current.X $LineChars.v $MetricLineColor
+                        }
+                        
+                        Set-CanvasCharScoped $current.Y $current.X $LineChars.dr $MetricLineColor
+                    }
+                }
             }
         }
 
-        Plot-SingleMetricLine $RenderVramUtilHistory $vramPointChar $RenderVramUtilColor $canvas $canvasColors $RenderGraphHeight $RenderGraphWidth
-        Plot-SingleMetricLine $RenderGpuUtilHistory $gpuPointChar $RenderGpuUtilColor $canvas $canvasColors $RenderGraphHeight $RenderGraphWidth
-        Plot-SingleMetricLine $RenderRamHistory $ramPointChar $RenderRamColor $canvas $canvasColors $RenderGraphHeight $RenderGraphWidth
-        Plot-SingleMetricLine $RenderCpuHistory $cpuPointChar $RenderCpuColor $canvas $canvasColors $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderVramUtilHistory $RenderVramUtilColor $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderGpuUtilHistory $RenderGpuUtilColor $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderRamHistory $RenderRamColor $RenderGraphHeight $RenderGraphWidth
+        PlotSingleMetricLine $RenderCpuHistory $RenderCpuColor $RenderGraphHeight $RenderGraphWidth
 
         for ($y = 0; $y -lt $RenderGraphHeight; $y++) {
             $line = ""; $yLabel = $yAxisLabels[$y]
-            if ($yLabel) { $line += "$RenderAxisColor$($yLabel.PadRight($yAxisLabelWidth))$RenderResetColor" } 
+            if ($yLabel) { $line += "$RenderAxisColor$($yLabel.PadRight($yAxisLabelWidth))$RenderResetColor" }
             else { $line += " " * $yAxisLabelWidth }
-            
+
             for ($x = 0; $x -lt $RenderGraphWidth; $x++) {
                 $charToPrint = $canvas[$y, $x]; $colorForChar = $canvasColors[$y, $x]
-                if ($colorForChar -eq $RenderResetColor -and $charToPrint -ne " "){$colorForChar = $RenderGridColor}
+                if ($colorForChar -eq $RenderResetColor -and $charToPrint -ne " " -and $charToPrint -eq $gridDotChar){
+                    $colorForChar = $RenderGridColor
+                } elseif ($colorForChar -eq $RenderResetColor -and $charToPrint -ne " ") {
+                     $colorForChar = $RenderAxisColor
+                }
                 $line += "$colorForChar$charToPrint$RenderResetColor"
             }
             $outputGraphLines.Add($line)
         }
 
-        $xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor└" + ("─" * $RenderGraphWidth) + "┘$RenderResetColor"
+        $xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.dl)" + ($LineChars.h * ($RenderGraphWidth-2)) + "$($LineChars.dr)$RenderResetColor"
+        if ($RenderGraphWidth -lt 2) {$xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.h * $RenderGraphWidth)$RenderResetColor"} # Handle very small widths
         $outputGraphLines.Add($xAxisLine)
-        
+
         $timeLabelsLine = (" " * $yAxisLabelWidth)
         $lbl_neg_full = "-$($RenderGraphWidth)s"; $lbl_neg_half = "-$([int]($RenderGraphWidth/2))s"; $lbl_zero = "0s "
-        $space1 = [Math]::Max(0, [int](($RenderGraphWidth/2) - $lbl_neg_full.Length - ($lbl_neg_half.Length/2)))
-        $space2 = [Math]::Max(0, [int](($RenderGraphWidth/2) - $lbl_zero.Length - ($lbl_neg_half.Length/2)))
-        $timeLabelsLine += "$RenderAxisColor$lbl_neg_full" + (" " * $space1) + "$lbl_neg_half" + (" " * $space2) + "$lbl_zero$RenderResetColor"
-        $timeLabelsLine = $timeLabelsLine.PadRight($RenderGraphWidth + $yAxisLabelWidth).Substring(0, $RenderGraphWidth + $yAxisLabelWidth)
+        $timeLabelLength = $RenderGraphWidth
+        $availableSpaceForLabels = $timeLabelLength - $lbl_zero.Length
+        $pos_neg_full = 0
+        $pos_neg_half = [Math]::Max(0, [int]($availableSpaceForLabels / 2) - [int]($lbl_neg_half.Length / 2))
+        $pos_zero = [Math]::Max(0, $availableSpaceForLabels - $lbl_zero.Length)
+
+        $tempTimeLine = (" " * $timeLabelLength)
+        function InsertString {param($original, $insert, $position)
+            return $original.Substring(0, $position) + $insert + $original.Substring($position + $insert.Length)
+        }
+        if (($pos_neg_full + $lbl_neg_full.Length) -le $timeLabelLength) {
+            $tempTimeLine = InsertString $tempTimeLine $lbl_neg_full $pos_neg_full
+        }
+        if (($pos_neg_half + $lbl_neg_half.Length) -le $timeLabelLength) {
+             $tempTimeLine = InsertString $tempTimeLine $lbl_neg_half $pos_neg_half
+        }
+        $tempTimeLine = InsertString $tempTimeLine $lbl_zero ([Math]::Max(0, $timeLabelLength - $lbl_zero.Length))
+
+        $timeLabelsLine += "$RenderAxisColor$tempTimeLine$RenderResetColor"
         $outputGraphLines.Add($timeLabelsLine)
 
         $legend = (" " * $yAxisLabelWidth) + "$RenderCpuColor$($cpuPointChar) CPU$RenderResetColor  " +
-                  "$RenderRamColor$($ramPointChar) RAM$RenderResetColor  " + "$RenderGpuUtilColor$($gpuPointChar) GPU$RenderResetColor  " +
-                  "$RenderVramUtilColor$($vramPointChar) VRAM$RenderResetColor"
+                                          "$RenderRamColor$($ramPointChar) RAM$RenderResetColor  " +
+                                          "$RenderGpuUtilColor$($gpuPointChar) GPU$RenderResetColor  " +
+                                          "$RenderVramUtilColor$($vramPointChar) VRAM$RenderResetColor"
         $outputGraphLines.Add($legend)
         return $outputGraphLines
     }
 
-
-    # --- Main Execution Loop of Show-LiveContinuousGraph ---
     try {
         [Console]::CursorVisible = $false
         $lastUpdateTime = [DateTime]::MinValue
@@ -993,12 +1113,11 @@ function Show-LiveUsageGraphs {
         $nvidiaSmiPathFound = (Test-Path $smiPath1) -or (Test-Path $smiPath2)
         $continueLoop = $true
         
-        # Console Buffer Handling
         $psHost = Get-Host
         $originalBufferWidth = $psHost.UI.RawUI.BufferSize.Width
         $originalBufferHeight = $psHost.UI.RawUI.BufferSize.Height
-        $requiredBufferWidth = $GraphWidthParam + 15 # Add some margin
-        $requiredBufferHeight = $GraphHeightParam + 15 # Add margin for text above/below graph
+        $requiredBufferWidth = $GraphWidthParam + 15
+        $requiredBufferHeight = $GraphHeightParam + 15
         if ($originalBufferWidth -lt $requiredBufferWidth -or $originalBufferHeight -lt $requiredBufferHeight) {
             try {
                 $newBufferSize = $psHost.UI.RawUI.BufferSize
@@ -1010,22 +1129,18 @@ function Show-LiveUsageGraphs {
             }
         }
         
-        # Calculate total height needed for the display
-        $totalDisplayLines = $GraphHeightParam + 12 # Adjust based on actual content
+        $totalDisplayLines = $GraphHeightParam + 12 
         
-        # Initial clear and draw the static parts
         Clear-Host
         $titleLine = "${BOLD}${MAGENTA}Live System Character Graph (Press 'q' or ESC to quit)${RESET}"
         Write-Host $titleLine
         Write-Host ("-" * ($GraphWidthParam + 15))
         
-        # Initialize display area with empty lines
         for ($i = 0; $i -lt $totalDisplayLines; $i++) {
             Write-Host ""
         }
         
-        # Remember the start position for updates
-        $startY = 2 # Position after the title and separator
+        $startY = 2
         
         while ($continueLoop) {
             $now = Get-Date
@@ -1059,14 +1174,12 @@ function Show-LiveUsageGraphs {
 
                 $displayLines = [System.Collections.Generic.List[string]]::new()
 
-                # Render the character line graph
-                $graphCanvasLines = Render-CharacterLineGraph -RenderCpuHistory $cpuHistory `
+                $graphCanvasLines = RenderCharacterLineGraph -RenderCpuHistory $cpuHistory `
                     -RenderRamHistory $ramHistory -RenderGpuUtilHistory $gpuUtilHistory -RenderVramUtilHistory $vramUtilHistory `
                     -RenderGraphHeight $GraphHeightParam -RenderGraphWidth $GraphWidthParam `
                     -RenderCpuColor $CpuLineColor -RenderRamColor $RamLineColor -RenderGpuUtilColor $GpuUtilLineColor -RenderVramUtilColor $VramUtilLineColor `
                     -RenderAxisColor $AxisColor -RenderGridColor $GridColor -RenderResetColor $RESET
                 
-                # Add the rendered graph lines
                 foreach ($graphLine in $graphCanvasLines) {
                     $displayLines.Add($graphLine)
                 }
@@ -1074,7 +1187,6 @@ function Show-LiveUsageGraphs {
                 $displayLines.Add("") 
 
                 $displayLines.Add("${BOLD}Current Usage:${RESET}")
-                # Summary bars using Format-UsageBar
                 if ($null -ne $cpuUsageVal) { $displayLines.Add((Format-UsageBar -Label "CPU" -Percentage $cpuUsageVal -PassedBarWidth $summaryBarWidth)) } 
                 else { $displayLines.Add("CPU:      ${ErrorColor}Error fetching data${RESET}") }
                 
@@ -1097,11 +1209,9 @@ function Show-LiveUsageGraphs {
                 $displayLines.Add(("-" * ($GraphWidthParam + 15)))
                 $displayLines.Add("${GRAY}Updated: $(Get-Date -Format 'HH:mm:ss')${RESET} | Refresh: ${RefreshRateSeconds}s")
 
-                # Update the display in-place using cursor positioning
                 $currentY = $startY
                 foreach ($line in $displayLines) {
                     Set-CursorPosition 0 $currentY
-                    # Clear the line before writing new content
                     Write-Host (" " * $Host.UI.RawUI.BufferSize.Width) -NoNewline
                     Set-CursorPosition 0 $currentY
                     Write-Host $line
@@ -1113,7 +1223,7 @@ function Show-LiveUsageGraphs {
     }
     finally {
         [Console]::CursorVisible = $true
-        try { # Restore original buffer size
+        try {
             $newBufferSize = $psHost.UI.RawUI.BufferSize
             $newBufferSize.Width = $originalBufferWidth
             $newBufferSize.Height = $originalBufferHeight
