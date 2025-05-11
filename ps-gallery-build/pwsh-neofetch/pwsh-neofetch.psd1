@@ -1,7 +1,7 @@
 @{
     RootModule = 'pwsh-neofetch.psm1'
     
-    ModuleVersion = '1.1.2'
+    ModuleVersion = '1.2.0'
     
     GUID = '4dc7d7d4-9924-4545-bd71-99932a7f6f8a'
     
