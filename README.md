@@ -216,10 +216,10 @@ These are the features I'm planning to implement in future releases:
 - [x] Custom ASCII art support
 - [x] Caching system for improved performance
 - [x] System benchmarking utility
+- [x] Comparison mode to highlight system changes over time
 - [ ] Color theme customization
 - [ ] User-configurable information display order
 - [ ] Export system information to file (JSON, CSV, TXT)
-- [ ] Comparison mode to highlight system changes over time
 - [ ] Remote system information collection
 - [ ] Gallery of pre-made ASCII art templates
 - [ ] Plugin system for custom information modules
