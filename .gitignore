@@ -6,6 +6,3 @@
 ### Windows ###
 # Folder config file
 [Dd]esktop.ini
-
-# Dev
-.github/workflows/publish.yml
