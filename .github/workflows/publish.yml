@@ -13,6 +13,41 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' })) {
+            Write-Host "Installing Pester 5.x..." -ForegroundColor Cyan
+            Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+          Import-Module Pester -MinimumVersion 5.0.0
+          Write-Host "Pester version: $((Get-Module Pester).Version)"
+      
+      - name: Run tests
+        shell: pwsh
+        env:
+          SKIP_BENCHMARK_TESTS: 'true'
+        run: |
+          Write-Host "Running Pester tests..." -ForegroundColor Cyan
+          
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = './test-results.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.Output.Verbosity = 'Detailed'
+          
+          Invoke-Pester -Configuration $config
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./test-results.xml
+          retention-days: 30
+      
       - name: Validate version matches release tag
         shell: pwsh
         run: |

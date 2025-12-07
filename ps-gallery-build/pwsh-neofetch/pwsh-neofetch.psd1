@@ -27,7 +27,7 @@
             
             ProjectUri = 'https://github.com/Sriram-PR/pwsh-neofetch/tree/main'
             
-            ReleaseNotes = 'v1.2.1 - Refactored codebase, improved CI/CD pipeline, enhanced error handling. See CHANGELOG.md for details.'
+            ReleaseNotes = 'v1.2.1 - Refactored codebase, removed standalone script, added CI testing, improved error handling. See CHANGELOG.md for details.'
         }
     }
 }
