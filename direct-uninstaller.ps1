@@ -1,219 +1,247 @@
 ﻿<#
 .SYNOPSIS
-    Uninstaller for PowerShell Neofetch
+    Uninstaller for pwsh-neofetch
 .DESCRIPTION
-    This script removes PowerShell Neofetch from your system, including modules, installation files, and profile references.
+    Removes pwsh-neofetch from your system, including:
+    - Module files (both 'pwsh-neofetch' and legacy 'Neofetch' installations)
+    - Configuration files
+    - Cache files
 .NOTES
     Author: Sriram PR
-    Version: 1.1
+    Version: 2.0
 #>
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$false)]
-    [string]$InstallPath = "$env:USERPROFILE\Tools\pwsh-neofetch",
-    
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$Force = $false,
     
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [switch]$KeepConfig = $false
 )
 
+$ErrorActionPreference = 'Stop'
+
 function Write-ColorMessage {
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory = $true)]
         [string]$Message,
         
-        [Parameter(Mandatory=$false)]
-        [string]$ForegroundColor = "White"
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('White', 'Cyan', 'Green', 'Yellow', 'Red', 'Gray')]
+        [string]$ForegroundColor = 'White'
     )
-    
     Write-Host $Message -ForegroundColor $ForegroundColor
 }
 
-function Remove-NeofetchModule {
-    $modulePaths = @(
-        "$env:USERPROFILE\Documents\PowerShell\Modules\Neofetch",
-        "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\Neofetch"
+function Remove-ModuleFiles {
+    <#
+    .SYNOPSIS
+        Removes module files for both current and legacy module names
+    #>
+    
+    $moduleNames = @('pwsh-neofetch', 'Neofetch')
+    $basePaths = @(
+        (Join-Path $env:USERPROFILE 'Documents\PowerShell\Modules'),
+        (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Modules')
     )
     
-    $modulesRemoved = $false
+    $removedCount = 0
     
-    foreach ($path in $modulePaths) {
-        if (Test-Path $path) {
-            try {
-                Remove-Item -Path $path -Recurse -Force
-                Write-ColorMessage "Removed module at: $path" -ForegroundColor Green
-                $modulesRemoved = $true
-            }
-            catch {
-                Write-ColorMessage "Error removing module at $path`: $_" -ForegroundColor Red
+    foreach ($basePath in $basePaths) {
+        foreach ($moduleName in $moduleNames) {
+            $modulePath = Join-Path $basePath $moduleName
+            
+            if (Test-Path $modulePath) {
+                try {
+                    # Unload module if loaded
+                    if (Get-Module -Name $moduleName -ErrorAction SilentlyContinue) {
+                        Remove-Module -Name $moduleName -Force -ErrorAction SilentlyContinue
+                    }
+                    
+                    Remove-Item -Path $modulePath -Recurse -Force
+                    Write-ColorMessage "Removed module: $modulePath" -ForegroundColor Green
+                    $removedCount++
+                }
+                catch {
+                    Write-ColorMessage "Error removing module at ${modulePath}: $_" -ForegroundColor Red
+                }
             }
         }
     }
     
-    return $modulesRemoved
+    return $removedCount
 }
 
-function Remove-NeofetchFromProfile {
-    $profilePaths = @(
-        $PROFILE,
-        $PROFILE.CurrentUserAllHosts
-    )
+function Remove-ProfileEntries {
+    <#
+    .SYNOPSIS
+        Removes neofetch-related entries from PowerShell profiles
+    #>
     
-    $profilesCleaned = $false
+    $profilePaths = @($PROFILE, $PROFILE.CurrentUserAllHosts) | 
+        Where-Object { $_ } | 
+        Select-Object -Unique
+    
+    $cleanedCount = 0
     
     foreach ($profilePath in $profilePaths) {
         if (Test-Path $profilePath) {
             try {
-                $content = Get-Content -Path $profilePath -Raw
+                $content = Get-Content -Path $profilePath -Raw -ErrorAction SilentlyContinue
+                $originalContent = $content
                 
-                $pattern = "(?ms)# PowerShell Neofetch.*?Import-Module Neofetch.*?}\s*\r?\n"
+                # Remove pwsh-neofetch related blocks
+                $patterns = @(
+                    '(?ms)# PowerShell Neofetch.*?Import-Module\s+(pwsh-neofetch|Neofetch).*?}\s*\r?\n?',
+                    '(?m)^.*Import-Module\s+(pwsh-neofetch|Neofetch).*$\r?\n?'
+                )
                 
-                if ($content -match $pattern) {
-                    $newContent = $content -replace $pattern, ""
-                    Set-Content -Path $profilePath -Value $newContent
-                    Write-ColorMessage "Removed Neofetch from profile: $profilePath" -ForegroundColor Green
-                    $profilesCleaned = $true
+                foreach ($pattern in $patterns) {
+                    $content = $content -replace $pattern, ''
+                }
+                
+                if ($content -ne $originalContent) {
+                    Set-Content -Path $profilePath -Value $content.Trim()
+                    Write-ColorMessage "Cleaned profile: $profilePath" -ForegroundColor Green
+                    $cleanedCount++
                 }
             }
             catch {
-                Write-ColorMessage "Error cleaning profile at $profilePath`: $_" -ForegroundColor Red
+                Write-ColorMessage "Error cleaning profile at ${profilePath}: $_" -ForegroundColor Red
             }
         }
     }
     
-    return $profilesCleaned
+    return $cleanedCount
 }
 
-function Uninstall-Neofetch {
-    Write-ColorMessage "`n===== PowerShell Neofetch Uninstaller =====" -ForegroundColor Cyan
+function Remove-ConfigFiles {
+    param(
+        [switch]$Backup
+    )
+    
+    $configFiles = @(
+        '.neofetch_ascii',
+        '.neofetch_cache_expiration',
+        '.neofetch_threads',
+        '.neofetch_profile_name'
+    )
+    
+    $removedCount = 0
+    
+    if ($Backup) {
+        $backupDir = Join-Path $env:TEMP 'neofetch_config_backup'
+        if (-not (Test-Path $backupDir)) {
+            New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+        }
+        
+        foreach ($file in $configFiles) {
+            $filePath = Join-Path $env:USERPROFILE $file
+            if (Test-Path $filePath) {
+                Copy-Item -Path $filePath -Destination $backupDir -Force
+            }
+        }
+        Write-ColorMessage "Configuration files backed up to: $backupDir" -ForegroundColor Green
+    }
+    
+    foreach ($file in $configFiles) {
+        $filePath = Join-Path $env:USERPROFILE $file
+        if (Test-Path $filePath) {
+            try {
+                Remove-Item -Path $filePath -Force
+                Write-ColorMessage "Removed config: $filePath" -ForegroundColor Green
+                $removedCount++
+            }
+            catch {
+                Write-ColorMessage "Error removing config ${filePath}: $_" -ForegroundColor Red
+            }
+        }
+    }
+    
+    return $removedCount
+}
+
+function Remove-CacheFiles {
+    $cacheFiles = @(
+        (Join-Path $env:TEMP 'neofetch_cache.xml'),
+        (Join-Path $env:TEMP 'neofetch_disk_test.dat')
+    )
+    
+    $removedCount = 0
+    
+    foreach ($filePath in $cacheFiles) {
+        if (Test-Path $filePath) {
+            try {
+                Remove-Item -Path $filePath -Force
+                Write-ColorMessage "Removed cache: $filePath" -ForegroundColor Green
+                $removedCount++
+            }
+            catch {
+                Write-ColorMessage "Error removing cache ${filePath}: $_" -ForegroundColor Red
+            }
+        }
+    }
+    
+    return $removedCount
+}
+
+function Uninstall-PwshNeofetch {
+    Write-ColorMessage "`n===== pwsh-neofetch Uninstaller =====" -ForegroundColor Cyan
     
     if (-not $Force) {
-        $confirm = Read-Host "Are you sure you want to uninstall PowerShell Neofetch? (Y/n)"
-        if ($confirm -match "^[Nn]") {
+        $confirm = Read-Host "Are you sure you want to uninstall pwsh-neofetch? (y/N)"
+        if ($confirm -notmatch '^[Yy]') {
             Write-ColorMessage "Uninstallation cancelled." -ForegroundColor Yellow
             return
         }
     }
     
-    Write-ColorMessage "Beginning uninstallation process..." -ForegroundColor Cyan
+    Write-ColorMessage "`nRemoving pwsh-neofetch components...`n" -ForegroundColor Cyan
     
-    $modulesRemoved = Remove-NeofetchModule
+    # Remove module files
+    $modulesRemoved = Remove-ModuleFiles
     
-    $profilesCleaned = Remove-NeofetchFromProfile
+    # Remove profile entries
+    $profilesCleaned = Remove-ProfileEntries
     
-    $installationRemoved = $false
-    if (Test-Path $InstallPath) {
-        try {
-            if ($KeepConfig) {
-                $configFiles = @(
-                    ".neofetch_ascii",
-                    ".neofetch_cache_expiration",
-                    ".neofetch_threads",
-                    ".neofetch_profile_name"
-                )
-                
-                $backupDir = Join-Path $env:TEMP "neofetch_config_backup"
-                New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-                
-                foreach ($file in $configFiles) {
-                    $filePath = Join-Path $env:USERPROFILE $file
-                    if (Test-Path $filePath) {
-                        Copy-Item -Path $filePath -Destination $backupDir
-                    }
-                }
-                
-                Write-ColorMessage "Configuration files backed up to: $backupDir" -ForegroundColor Green
-            }
-            else {
-                # Delete config files if not keeping them
-                $configFiles = @(
-                    ".neofetch_ascii",
-                    ".neofetch_cache_expiration",
-                    ".neofetch_threads",
-                    ".neofetch_profile_name"
-                )
-                
-                foreach ($file in $configFiles) {
-                    $filePath = Join-Path $env:USERPROFILE $file
-                    if (Test-Path $filePath) {
-                        Remove-Item -Path $filePath -Force
-                        Write-ColorMessage "Removed configuration file: $filePath" -ForegroundColor Green
-                    }
-                }
-            }
-            
-            Remove-Item -Path $InstallPath -Recurse -Force
-            Write-ColorMessage "Removed installation directory: $InstallPath" -ForegroundColor Green
-            $installationRemoved = $true
-            
-            if ($KeepConfig) {
-                $backupDir = Join-Path $env:TEMP "neofetch_config_backup"
-                if (Test-Path $backupDir) {
-                    foreach ($file in Get-ChildItem -Path $backupDir) {
-                        Copy-Item -Path $file.FullName -Destination $env:USERPROFILE
-                    }
-                    Write-ColorMessage "Restored configuration files to user profile." -ForegroundColor Green
-                }
-            }
-        }
-        catch {
-            Write-ColorMessage "Error removing installation directory: $_" -ForegroundColor Red
-        }
-    }
-    else {
-        Write-ColorMessage "Installation directory not found at: $InstallPath" -ForegroundColor Yellow
+    # Handle config files
+    if ($KeepConfig) {
+        Write-ColorMessage "Keeping configuration files (--KeepConfig specified)" -ForegroundColor Yellow
+        $configsRemoved = 0
+    } else {
+        $configsRemoved = Remove-ConfigFiles
     }
     
-    $cachePath = Join-Path $env:TEMP "neofetch_cache.xml"
-    if (Test-Path $cachePath) {
-        try {
-            Remove-Item -Path $cachePath -Force
-            Write-ColorMessage "Removed cache file: $cachePath" -ForegroundColor Green
-        }
-        catch {
-            Write-ColorMessage "Error removing cache file: $_" -ForegroundColor Red
-        }
-    }
+    # Remove cache files
+    $cacheRemoved = Remove-CacheFiles
     
-    $testFilePath = Join-Path $env:TEMP "neofetch_disk_test.dat"
-    if (Test-Path $testFilePath) {
-        try {
-            Remove-Item -Path $testFilePath -Force
-            Write-ColorMessage "Removed test file: $testFilePath" -ForegroundColor Green
-        }
-        catch {
-            Write-ColorMessage "Error removing test file: $_" -ForegroundColor Red
-        }
-    }
-    
+    # Summary
     Write-ColorMessage "`n===== Uninstallation Summary =====" -ForegroundColor Cyan
     
-    if ($modulesRemoved -or $profilesCleaned -or $installationRemoved) {
-        Write-ColorMessage "PowerShell Neofetch has been successfully uninstalled!" -ForegroundColor Green
+    $totalRemoved = $modulesRemoved + $profilesCleaned + $configsRemoved + $cacheRemoved
+    
+    if ($totalRemoved -gt 0) {
+        Write-ColorMessage "pwsh-neofetch has been successfully uninstalled!" -ForegroundColor Green
+    } else {
+        Write-ColorMessage "No pwsh-neofetch components were found to uninstall." -ForegroundColor Yellow
     }
-    else {
-        Write-ColorMessage "No PowerShell Neofetch components were found to uninstall." -ForegroundColor Yellow
-    }
     
-    $moduleStatus = if ($modulesRemoved) { "Yes" } else { "No" }
-    $profileStatus = if ($profilesCleaned) { "Yes" } else { "No" }
-    $installStatus = if ($installationRemoved) { "Yes" } else { "No" }
+    Write-ColorMessage "`nComponents removed:" -ForegroundColor Cyan
+    Write-ColorMessage "  Module files:     $modulesRemoved" -ForegroundColor White
+    Write-ColorMessage "  Profile entries:  $profilesCleaned" -ForegroundColor White
+    Write-ColorMessage "  Config files:     $(if ($KeepConfig) { 'Kept' } else { $configsRemoved })" -ForegroundColor White
+    Write-ColorMessage "  Cache files:      $cacheRemoved" -ForegroundColor White
     
-    Write-ColorMessage "PowerShell Neofetch components removed:" -ForegroundColor Cyan
-    Write-ColorMessage "  Module Files: $moduleStatus" -ForegroundColor White
-    Write-ColorMessage "  Profile References: $profileStatus" -ForegroundColor White
-    Write-ColorMessage "  Installation Directory: $installStatus" -ForegroundColor White
-    
-    Write-ColorMessage "`nThank you for trying PowerShell Neofetch!" -ForegroundColor Cyan
+    Write-ColorMessage "`nThank you for trying pwsh-neofetch!" -ForegroundColor Cyan
 }
 
+# Main execution
 try {
-    Uninstall-Neofetch
+    Uninstall-PwshNeofetch
 }
 catch {
-    Write-ColorMessage "Critical error during uninstallation: $_" -ForegroundColor Red
+    Write-ColorMessage "`nCritical error during uninstallation: $_" -ForegroundColor Red
     Write-ColorMessage "Uninstallation may be incomplete." -ForegroundColor Red
+    exit 1
 }

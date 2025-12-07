@@ -1,4 +1,25 @@
-Function Initialize-NeofetchConfig {
+# ============================================================================
+# pwsh-neofetch.psm1
+# A feature-rich PowerShell implementation of Neofetch for Windows
+# ============================================================================
+
+#region Module Configuration
+
+# Module-level error tracking for diagnostics (S8)
+$script:LastErrors = @{}
+
+# Default configuration values
+$script:Defaults = @{
+    CacheExpirationSeconds = 1800
+    MaxThreads = 4
+    ProfileName = "Windows PowerShell"
+}
+
+#endregion
+
+#region Initialization Functions
+
+function Initialize-NeofetchConfig {
     param (
         [switch]$Force
     )
@@ -29,7 +50,6 @@ Function Initialize-NeofetchConfig {
         return
     }
     
-    # Clear screen and show welcome
     Clear-Host
     Write-Host "`n${BOLD}${CYAN}=============================${RESET}"
     Write-Host "${BOLD}${CYAN} Windows Neofetch Setup${RESET}"
@@ -43,7 +63,7 @@ Function Initialize-NeofetchConfig {
     Write-Host "This helps identify the correct terminal font and appearance settings."
     Write-Host "Common values: 'Windows PowerShell', 'PowerShell', 'Command Prompt'"
     
-    $defaultProfileName = "Windows PowerShell"
+    $defaultProfileName = $script:Defaults.ProfileName
     $profileName = Read-Host "Enter your Windows Terminal profile name [Default: $defaultProfileName]"
     
     if ([string]::IsNullOrWhiteSpace($profileName)) {
@@ -61,7 +81,7 @@ Function Initialize-NeofetchConfig {
     Write-Host "Higher values can be faster but may use more system resources."
     
     $processorCount = [Environment]::ProcessorCount
-    $recommendedThreads = [Math]::Min(4, $processorCount)
+    $recommendedThreads = [Math]::Min($script:Defaults.MaxThreads, $processorCount)
     
     do {
         $maxThreadsInput = Read-Host "Enter max threads (1-$processorCount) [Default: $recommendedThreads]"
@@ -93,14 +113,13 @@ Function Initialize-NeofetchConfig {
     if ($cacheOption -match "^[Nn]") {
         $enableCache = $false
         Write-Host "Caching will be ${BOLD}disabled${RESET} (system info will be gathered fresh each time)"
-        # Setting cache expiration to 0 indicates caching is disabled
         $cacheExpiration = 0
         $cacheExpiration | Out-File -FilePath $cacheExpirationPath -Force
     } else {
         Write-Host "Caching is ${BOLD}enabled${RESET} (system info will be cached between runs)"
         Write-Host "This sets how long (in seconds) before cache is refreshed."
         
-        $defaultExpiration = 1800
+        $defaultExpiration = $script:Defaults.CacheExpirationSeconds
         $defaultExpirationMin = $defaultExpiration / 60
         
         do {
@@ -133,7 +152,7 @@ Function Initialize-NeofetchConfig {
     if ($customArtOption -match "^[Yy]") {
         $useCustomArt = $true
         Write-Host "`nTo set custom ASCII art, use this command after setup completes:"
-        Write-Host "${BOLD}neofetch -asciiart \"C:\path\to\your\ascii_art.txt\"${RESET}"
+        Write-Host "${BOLD}neofetch -asciiart `"C:\path\to\your\ascii_art.txt`"${RESET}"
     } else {
         Write-Host "Using default Windows logo ASCII art"
     }
@@ -169,6 +188,7 @@ Function Initialize-NeofetchConfig {
         return $false
     }
 }
+
 function Reset-NeofetchConfiguration {
     $cacheFile = Join-Path $env:TEMP "neofetch_cache.xml"
     $configFiles = @(
@@ -194,8 +214,16 @@ function Reset-NeofetchConfiguration {
         $reloadCount++
     }
     
+    # Clear error tracking
+    $script:LastErrors = @{}
+    
     return $reloadCount
 }
+
+#endregion
+
+#region Benchmark Functions
+
 function Invoke-SystemBenchmark {
     param (
         [switch]$Quiet
@@ -396,6 +424,10 @@ function Show-BenchmarkResults {
     Write-Host ""
 }
 
+#endregion
+
+#region Configuration Helper Functions
+
 function Set-ProfileNameSetting {
     param (
         [string]$ProfileName
@@ -433,6 +465,10 @@ function Reset-ThreadsDefault {
     return $false
 }
 
+#endregion
+
+#region System Information Functions
+
 function Get-SystemInfoFast {
     param (
         [switch]$NoCacheMode,
@@ -443,7 +479,7 @@ function Get-SystemInfoFast {
     $cacheableParams = @("OS", "Host", "Kernel", "Resolution", "WM", "CPU", "GPU", "Terminal", "TerminalFont", "Shell")
     
     $threadsSavePath = Join-Path $env:USERPROFILE ".neofetch_threads"
-    $maxCoresForPool = 4
+    $maxCoresForPool = $script:Defaults.MaxThreads
     
     if ($MaxThreadsOverride -gt 0) {
         $MaxThreadsOverride | Out-File -FilePath $threadsSavePath -Force
@@ -455,7 +491,9 @@ function Get-SystemInfoFast {
             if ($savedThreads -gt 0) {
                 $maxCoresForPool = $savedThreads
             }
-        } catch {}
+        } catch {
+            Write-Verbose "Error reading thread configuration: $_"
+        }
     }
     
     $maxCoresForPool = [System.Math]::Min($maxCoresForPool, [Environment]::ProcessorCount)
@@ -463,7 +501,7 @@ function Get-SystemInfoFast {
     $cachePath = Join-Path $env:TEMP "neofetch_cache.xml"
     
     $cacheExpirationPath = Join-Path $env:USERPROFILE ".neofetch_cache_expiration"
-    [int]$cacheExpirationSeconds = 1800
+    [int]$cacheExpirationSeconds = $script:Defaults.CacheExpirationSeconds
     
     if ($CacheExpirationOverride -gt 0) {
         $CacheExpirationOverride | Out-File -FilePath $cacheExpirationPath -Force
@@ -476,7 +514,9 @@ function Get-SystemInfoFast {
                 $cacheExpirationSeconds = $savedExpiration
             }
         }
-        catch {}
+        catch {
+            Write-Verbose "Error reading cache expiration configuration: $_"
+        }
     }
     
     $cacheMaxAge = [TimeSpan]::FromSeconds($cacheExpirationSeconds)
@@ -537,11 +577,18 @@ function Get-SystemInfoFast {
         $results.Shell = "PowerShell " + $PSVersionTable.PSVersion.ToString()
     }
     
+    # S8: All scriptblocks now include Write-Verbose for error logging
     $scriptblocks.Host = {
-        $ManufacturerKey = "HKLM:\HARDWARE\DESCRIPTION\System\BIOS"
-        $Manufacturer = (Get-ItemProperty -Path $ManufacturerKey -Name SystemManufacturer -ErrorAction SilentlyContinue).SystemManufacturer
-        $Model = (Get-ItemProperty -Path $ManufacturerKey -Name SystemProductName -ErrorAction SilentlyContinue).SystemProductName
-        return "$Manufacturer $Model"
+        try {
+            $ManufacturerKey = "HKLM:\HARDWARE\DESCRIPTION\System\BIOS"
+            $Manufacturer = (Get-ItemProperty -Path $ManufacturerKey -Name SystemManufacturer -ErrorAction SilentlyContinue).SystemManufacturer
+            $Model = (Get-ItemProperty -Path $ManufacturerKey -Name SystemProductName -ErrorAction SilentlyContinue).SystemProductName
+            return "$Manufacturer $Model"
+        }
+        catch {
+            Write-Verbose "Error getting Host info: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.Uptime = {
@@ -552,12 +599,20 @@ function Get-SystemInfoFast {
             $Uptime = $CurrentTime - $BootTime
             return "$($Uptime.Days) days, $($Uptime.Hours) hours, $($Uptime.Minutes) mins"
         }
-        catch { return "Unknown" }
+        catch {
+            Write-Verbose "Error getting Uptime: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.Packages = {
-        try { return (Get-Package | Measure-Object).Count }
-        catch { return "Unknown" }
+        try {
+            return (Get-Package -ErrorAction Stop | Measure-Object).Count
+        }
+        catch {
+            Write-Verbose "Error getting Packages count: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.Resolution = {
@@ -569,7 +624,10 @@ function Get-SystemInfoFast {
             }
             return "Unknown"
         }
-        catch { return "Unknown" }
+        catch {
+            Write-Verbose "Error getting Resolution: $_"
+            return "Unknown"
+        }
     }
 
     $scriptblocks.WM = {
@@ -582,11 +640,20 @@ function Get-SystemInfoFast {
             }
             return "Windows Explorer"
         }
-        catch { return "Windows Explorer" }
+        catch {
+            Write-Verbose "Error getting WM: $_"
+            return "Windows Explorer"
+        }
     }
     
     $scriptblocks.Terminal = {
-        return $Host.Name
+        try {
+            return $Host.Name
+        }
+        catch {
+            Write-Verbose "Error getting Terminal: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.TerminalFont = {
@@ -609,6 +676,7 @@ function Get-SystemInfoFast {
                         $profileNameToUse = $savedProfileName.Trim()
                     }
                 } catch {
+                    Write-Verbose "Error reading profile name: $_"
                 }
             }
             
@@ -639,7 +707,8 @@ function Get-SystemInfoFast {
             return "$font [Profile: $profileNameToUse]"
         }
         catch {
-            return "Terminal font detection error: $_"
+            Write-Verbose "Error getting Terminal Font: $_"
+            return "Terminal font detection error"
         }
     }
 
@@ -651,7 +720,10 @@ function Get-SystemInfoFast {
             $CPUSpeed = [math]::Round($CPUInfo.MaxClockSpeed / 1000, 1)
             return "$CPU ($CPUCores) @ $CPUSpeed" + "GHz"
         }
-        catch { return "Unknown" }
+        catch {
+            Write-Verbose "Error getting CPU info: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.GPU = {
@@ -669,6 +741,7 @@ function Get-SystemInfoFast {
             }
         }
         catch {
+            Write-Verbose "Error getting GPU info: $_"
             return "Unknown"
         }
     }
@@ -693,6 +766,7 @@ function Get-SystemInfoFast {
             return "Unknown"
         }
         catch {
+            Write-Verbose "Error getting GPU Memory: $_"
             return "Unknown"
         }
     }
@@ -706,7 +780,10 @@ function Get-SystemInfoFast {
             $RAMPercent = [math]::Round(($UsedRAM / $TotalRAM) * 100)
             return "${UsedRAM}GiB / ${TotalRAM}GiB (${RAMPercent}%)"
         }
-        catch { return "Unknown" }
+        catch {
+            Write-Verbose "Error getting Memory info: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.DiskUsage = {
@@ -719,7 +796,10 @@ function Get-SystemInfoFast {
             $DiskPercent = [math]::Round(($DiskUsed / $DiskTotal) * 100)
             return "$env:SystemDrive ${DiskUsed}GB / ${DiskTotal}GB (${DiskPercent}%)"
         }
-        catch { return "Unknown" }
+        catch {
+            Write-Verbose "Error getting Disk Usage: $_"
+            return "Unknown"
+        }
     }
     
     $scriptblocks.Battery = {
@@ -747,7 +827,10 @@ function Get-SystemInfoFast {
             }
             return "No battery detected"
         }
-        catch { return "No battery detected" }
+        catch {
+            Write-Verbose "Error getting Battery info: $_"
+            return "No battery detected"
+        }
     }
 
     $paramsToGather = @()
@@ -817,6 +900,10 @@ function Get-SystemInfoFast {
     }
 }
 
+#endregion
+
+#region Display Functions
+
 function Get-ColorBlocks {
     $ESC = [char]27
     $RESET = "$ESC[0m"
@@ -850,6 +937,10 @@ function Get-DefaultAsciiArt {
         "                     ````````^^^^^^MMMM"
     )
 }
+
+#endregion
+
+#region Live Monitoring Functions
 
 function Show-LiveUsageGraphs {
     param (
@@ -915,7 +1006,7 @@ function Show-LiveUsageGraphs {
             "*VRAM*" { $barColorToUse = $VramBarColor }
         }
         if ($Percentage -ge 90) { $barColorToUse = $ErrorColor } 
-        elseif ($Percentage -ge 70) { if($Label -notmatch "CPU"){ $barColorToUse = $VramUtilLineColor }} # Yellowish for warning
+        elseif ($Percentage -ge 70) { if($Label -notmatch "CPU"){ $barColorToUse = $VramUtilLineColor }}
         
         $paddedLabel = "{0,-10}" -f $Label
         $barSegment = "[" + ($barColorToUse + ("█" * $filledChars) + $RESET) + ("░" * $emptyChars) + "]"
@@ -927,21 +1018,26 @@ function Show-LiveUsageGraphs {
 
     function Get-LiveCpuUsage {
         try {
-            # $cpuLoad = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
-            $cpuLoad = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+            $cpuLoad = (Get-Counter '\Processor(_Total)\% Processor Time' -ErrorAction Stop).CounterSamples.CookedValue
             return [Math]::Round($cpuLoad, 1)
-        } catch { return $null }
+        } catch {
+            Write-Verbose "Error getting live CPU usage: $_"
+            return $null
+        }
     }
 
     function Get-LiveRamUsage {
         try {
-            $os = Get-CimInstance -ClassName Win32_OperatingSystem
+            $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
             $totalMemoryMB = [Math]::Round($os.TotalVisibleMemorySize / 1KB, 0)
             $freeMemoryMB = [Math]::Round($os.FreePhysicalMemory / 1KB, 0)
             $usedMemoryMB = $totalMemoryMB - $freeMemoryMB
             $ramPercentUsed = if ($totalMemoryMB -gt 0) { [Math]::Round(($usedMemoryMB / $totalMemoryMB) * 100, 1) } else { 0 }
             return @{ TotalMB = $totalMemoryMB; UsedMB = $usedMemoryMB; Percent = $ramPercentUsed }
-        } catch { return $null }
+        } catch {
+            Write-Verbose "Error getting live RAM usage: $_"
+            return $null
+        }
     }
 
     function Get-LiveNvidiaGpuUsage {
@@ -952,7 +1048,7 @@ function Show-LiveUsageGraphs {
                 "C:\Windows\System32\nvidia-smi.exe"
             } else { return $null }
             
-            $output = & $smiPath --query-gpu=utilization.gpu,memory.total,memory.used --format=csv,noheader,nounits
+            $output = & $smiPath --query-gpu=utilization.gpu,memory.total,memory.used --format=csv,noheader,nounits 2>$null
             if (-not $output) { return $null }
             $stats = $output.Trim() -split ','
             if ($stats.Count -lt 3) { return $null }
@@ -963,7 +1059,10 @@ function Show-LiveUsageGraphs {
             $vramPercentUsed = if ($vramTotalMB -gt 0) { [Math]::Round(($vramUsedMB / $vramTotalMB) * 100, 1) } else { 0 }
             
             return @{ GPUUtilization = $gpuUtilization; VRAMTotalMB = $vramTotalMB; VRAMUsedMB = $vramUsedMB; VRAMPercent = $vramPercentUsed }
-        } catch { return $null }
+        } catch {
+            Write-Verbose "Error getting live NVIDIA GPU usage: $_"
+            return $null
+        }
     }
 
     function RenderCharacterLineGraph {
@@ -980,18 +1079,8 @@ function Show-LiveUsageGraphs {
         $outputGraphLines = [System.Collections.Generic.List[string]]::new()
 
         $LineChars = @{
-            h = '─' # Horizontal line
-            v = '│' # Vertical line
-            ul = '┐' # Corner: up-left (connects to left, goes down)
-            ur = '┌' # Corner: up-right (connects to right, goes down)
-            dl = '┘' # Corner: down-left (connects to left, goes up)
-            dr = '└' # Corner: down-right (connects to right, goes up)
-            cross = '┼' # Intersection of horizontal and vertical
-            # T-junctions
-            t_down = '┬'  # Horizontal line, stem down
-            t_up = '┴'    # Horizontal line, stem up
-            t_left = '┤'  # Vertical line, stem left
-            t_right = '├' # Vertical line, stem right
+            h = '─'; v = '│'; ul = '┐'; ur = '┌'; dl = '┘'; dr = '└'
+            cross = '┼'; t_down = '┬'; t_up = '┴'; t_left = '┤'; t_right = '├'
         }
         $cpuPointChar = '*'; $ramPointChar = '+'; $gpuPointChar = '#'; $vramPointChar = '@'
         $gridDotChar = '·'
@@ -1026,7 +1115,6 @@ function Show-LiveUsageGraphs {
             }
 
             $existingChar = $canvas[$y, $x]
-            $existingColor = $canvasColors[$y, $x]
             $isBlankOrGrid = ($existingChar -eq " " -or $existingChar -eq $gridDotChar)
 
             if ($isBlankOrGrid) {
@@ -1042,40 +1130,38 @@ function Show-LiveUsageGraphs {
             if ($charToDraw -eq $LineChars.h) {
                 $merged = $true
                 switch ($existingChar) {
-                    $LineChars.v      { $finalChar = $LineChars.cross;   $finalColor = $RenderAxisColor; break } # V + H -> ┼ (neutral)
-                    $LineChars.ul     { $finalChar = $LineChars.t_down;  break } # ┐ + H -> ┬
-                    $LineChars.ur     { $finalChar = $LineChars.t_down;  break } # ┌ + H -> ┬
-                    $LineChars.dl     { $finalChar = $LineChars.t_up;    break } # ┘ + H -> ┴
-                    $LineChars.dr     { $finalChar = $LineChars.t_up;    break } # └ + H -> ┴
-                    $LineChars.t_left { $finalChar = $LineChars.cross;  break } # ┤ + H -> ┼
-                    $LineChars.t_right { $finalChar = $LineChars.cross;  break } # ├ + H -> ┼
-                    $LineChars.h      { $finalChar = $LineChars.h;      break; }
-                    $LineChars.t_down { $finalChar = $LineChars.t_down; break; }
-                    $LineChars.t_up   { $finalChar = $LineChars.t_up;   break; }
-                    $LineChars.cross  { $finalChar = $LineChars.cross;  break; }
+                    $LineChars.v      { $finalChar = $LineChars.cross;   $finalColor = $RenderAxisColor; break }
+                    $LineChars.ul     { $finalChar = $LineChars.t_down;  break }
+                    $LineChars.ur     { $finalChar = $LineChars.t_down;  break }
+                    $LineChars.dl     { $finalChar = $LineChars.t_up;    break }
+                    $LineChars.dr     { $finalChar = $LineChars.t_up;    break }
+                    $LineChars.t_left { $finalChar = $LineChars.cross;  break }
+                    $LineChars.t_right { $finalChar = $LineChars.cross;  break }
+                    $LineChars.h      { $finalChar = $LineChars.h;      break }
+                    $LineChars.t_down { $finalChar = $LineChars.t_down; break }
+                    $LineChars.t_up   { $finalChar = $LineChars.t_up;   break }
+                    $LineChars.cross  { $finalChar = $LineChars.cross;  break }
                     default           { $merged = $false }
                 }
             }
-            
             elseif ($charToDraw -eq $LineChars.v) {
                 $merged = $true
                 switch ($existingChar) {
-                    $LineChars.h      { $finalChar = $LineChars.cross;    $finalColor = $RenderAxisColor; break } # H + V -> ┼ (neutral)
-                    $LineChars.ul     { $finalChar = $LineChars.t_left;   break } # ┐ + V -> ┤
-                    $LineChars.ur     { $finalChar = $LineChars.t_right;  break } # ┌ + V -> ├
-                    $LineChars.dl     { $finalChar = $LineChars.t_left;   break } # ┘ + V -> ┤
-                    $LineChars.dr     { $finalChar = $LineChars.t_right;  break } # └ + V -> ├
-                    $LineChars.t_down { $finalChar = $LineChars.cross;   break } # ┬ + V -> ┼
-                    $LineChars.t_up   { $finalChar = $LineChars.cross;   break } # ┴ + V -> ┼
-                    $LineChars.v       { $finalChar = $LineChars.v;       break; }
-                    $LineChars.t_left  { $finalChar = $LineChars.t_left;  break; }
-                    $LineChars.t_right { $finalChar = $LineChars.t_right; break; }
-                    $LineChars.cross   { $finalChar = $LineChars.cross;   break; }
+                    $LineChars.h      { $finalChar = $LineChars.cross;    $finalColor = $RenderAxisColor; break }
+                    $LineChars.ul     { $finalChar = $LineChars.t_left;   break }
+                    $LineChars.ur     { $finalChar = $LineChars.t_right;  break }
+                    $LineChars.dl     { $finalChar = $LineChars.t_left;   break }
+                    $LineChars.dr     { $finalChar = $LineChars.t_right;  break }
+                    $LineChars.t_down { $finalChar = $LineChars.cross;   break }
+                    $LineChars.t_up   { $finalChar = $LineChars.cross;   break }
+                    $LineChars.v       { $finalChar = $LineChars.v;       break }
+                    $LineChars.t_left  { $finalChar = $LineChars.t_left;  break }
+                    $LineChars.t_right { $finalChar = $LineChars.t_right; break }
+                    $LineChars.cross   { $finalChar = $LineChars.cross;   break }
                     default            { $merged = $false }
                 }
             }
-
-            elseif (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur) -or `
+            elseif (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur) -or
                     ($charToDraw -eq $LineChars.dl) -or ($charToDraw -eq $LineChars.dr)) {
                 if ($existingChar -eq $LineChars.h) {
                     if (($charToDraw -eq $LineChars.ul) -or ($charToDraw -eq $LineChars.ur)) { $finalChar = $LineChars.t_down }
@@ -1140,20 +1226,16 @@ function Show-LiveUsageGraphs {
                     
                     if ($isRising) {
                         Set-CanvasCharScoped $previous.Y $current.X $LineChars.dl $MetricLineColor
-                        
                         for ($y_vert = ($current.Y + 1); $y_vert -lt $previous.Y; $y_vert++) {
                             Set-CanvasCharScoped $y_vert $current.X $LineChars.v $MetricLineColor
                         }
-                        
                         Set-CanvasCharScoped $current.Y $current.X $LineChars.ur $MetricLineColor
                     }
                     else {
                         Set-CanvasCharScoped $previous.Y $current.X $LineChars.ul $MetricLineColor
-                        
                         for ($y_vert = ($previous.Y + 1); $y_vert -lt $current.Y; $y_vert++) {
                             Set-CanvasCharScoped $y_vert $current.X $LineChars.v $MetricLineColor
                         }
-                        
                         Set-CanvasCharScoped $current.Y $current.X $LineChars.dr $MetricLineColor
                     }
                 }
@@ -1183,7 +1265,7 @@ function Show-LiveUsageGraphs {
         }
 
         $xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.dl)" + ($LineChars.h * ($RenderGraphWidth-2)) + "$($LineChars.dr)$RenderResetColor"
-        if ($RenderGraphWidth -lt 2) {$xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.h * $RenderGraphWidth)$RenderResetColor"} # Handle very small widths
+        if ($RenderGraphWidth -lt 2) {$xAxisLine = (" " * $yAxisLabelWidth) + "$RenderAxisColor$($LineChars.h * $RenderGraphWidth)$RenderResetColor"}
         $outputGraphLines.Add($xAxisLine)
 
         $timeLabelsLine = (" " * $yAxisLabelWidth)
@@ -1192,7 +1274,6 @@ function Show-LiveUsageGraphs {
         $availableSpaceForLabels = $timeLabelLength - $lbl_zero.Length
         $pos_neg_full = 0
         $pos_neg_half = [Math]::Max(0, [int]($availableSpaceForLabels / 2) - [int]($lbl_neg_half.Length / 2))
-        $pos_zero = [Math]::Max(0, $availableSpaceForLabels - $lbl_zero.Length)
 
         $tempTimeLine = (" " * $timeLabelLength)
         function InsertString {param($original, $insert, $position)
@@ -1217,17 +1298,25 @@ function Show-LiveUsageGraphs {
         return $outputGraphLines
     }
 
+    # S7 FIX: Initialize variables BEFORE try block to ensure they're available in finally
+    $psHost = $null
+    $originalBufferWidth = 0
+    $originalBufferHeight = 0
+
     try {
         [Console]::CursorVisible = $false
+        
+        # Assign after try starts (but variables exist in scope)
+        $psHost = Get-Host
+        $originalBufferWidth = $psHost.UI.RawUI.BufferSize.Width
+        $originalBufferHeight = $psHost.UI.RawUI.BufferSize.Height
+        
         $lastUpdateTime = [DateTime]::MinValue
         $smiPath1 = "C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
         $smiPath2 = "C:\Windows\System32\nvidia-smi.exe"
         $nvidiaSmiPathFound = (Test-Path $smiPath1) -or (Test-Path $smiPath2)
         $continueLoop = $true
         
-        $psHost = Get-Host
-        $originalBufferWidth = $psHost.UI.RawUI.BufferSize.Width
-        $originalBufferHeight = $psHost.UI.RawUI.BufferSize.Height
         $requiredBufferWidth = $GraphWidthParam + 15
         $requiredBufferHeight = $GraphHeightParam + 15
         if ($originalBufferWidth -lt $requiredBufferWidth -or $originalBufferHeight -lt $requiredBufferHeight) {
@@ -1335,15 +1424,25 @@ function Show-LiveUsageGraphs {
     }
     finally {
         [Console]::CursorVisible = $true
-        try {
-            $newBufferSize = $psHost.UI.RawUI.BufferSize
-            $newBufferSize.Width = $originalBufferWidth
-            $newBufferSize.Height = $originalBufferHeight
-            $psHost.UI.RawUI.BufferSize = $newBufferSize
-        } catch {}
+        
+        # S7 FIX: Add null check before accessing $psHost
+        if ($null -ne $psHost -and $originalBufferWidth -gt 0 -and $originalBufferHeight -gt 0) {
+            try {
+                $newBufferSize = $psHost.UI.RawUI.BufferSize
+                $newBufferSize.Width = $originalBufferWidth
+                $newBufferSize.Height = $originalBufferHeight
+                $psHost.UI.RawUI.BufferSize = $newBufferSize
+            } catch {
+                # Silently ignore - buffer restoration is best-effort
+            }
+        }
         Clear-Host
     }
 }
+
+#endregion
+
+#region ASCII Art Functions
 
 function Get-ASCIIArt {
     param (
@@ -1456,6 +1555,10 @@ function Get-ProcessedASCIIArt {
     }
 }
 
+#endregion
+
+#region Help Functions
+
 function Show-Usage {
     Write-Host ""
     Write-Host "Windows Neofetch Usage:" -ForegroundColor Cyan
@@ -1479,23 +1582,27 @@ function Show-Usage {
     Write-Host "  -minimal             Display a minimal view with only essential system information." -ForegroundColor White
     Write-Host "  -benchmark           Run a system benchmark and display results." -ForegroundColor White
     Write-Host "  -live                Display live CPU, RAM, GPU, and VRAM usage graphs." -ForegroundColor White
-    Write-Host "  -reset               Reset all configuration files and caches to defaults." -ForegroundColor White
+    Write-Host "  -reload              Reset all configuration files and caches to defaults." -ForegroundColor White
     Write-Host "  -help                Display this help message." -ForegroundColor White
     Write-Host ""
     Write-Host "Examples:" -ForegroundColor Cyan
     Write-Host "  neofetch" -ForegroundColor White
-     Write-Host "  neofetch -init" -ForegroundColor White  
+    Write-Host "  neofetch -init" -ForegroundColor White  
     Write-Host "  neofetch -init -Force" -ForegroundColor White
     Write-Host "  neofetch -asciiart `"Drive:\path\to\ascii\art.txt`"" -ForegroundColor White
     Write-Host "  neofetch -defaultart" -ForegroundColor White
-    Write-Host "  neofetch profileName `"PowerShell`"" -ForegroundColor White
+    Write-Host "  neofetch -profileName `"PowerShell`"" -ForegroundColor White
     Write-Host "  neofetch -changes" -ForegroundColor White
     Write-Host "  neofetch -maxThreads 8" -ForegroundColor White
     Write-Host "  neofetch -benchmark" -ForegroundColor White
+    Write-Host "  neofetch -live" -ForegroundColor White
     Write-Host ""
 }
 
-# Main function that will be exported and called by the alias
+#endregion
+
+#region Main Function
+
 function neofetch {
     [CmdletBinding()]
     param(
@@ -1586,7 +1693,6 @@ function neofetch {
         }
     }
 
-
     if ($reload) {
         $reloadCount = Reset-NeofetchConfiguration
         Write-Host "Neofetch has been reset! Cleared $reloadCount configuration and cache files." -ForegroundColor Cyan
@@ -1622,7 +1728,7 @@ function neofetch {
     if ($defaultcache) {
         $cacheChanged = Reset-CacheExpirationDefault
         if ($cacheChanged) {
-            Write-Host "Cache expiration reset to default (1800 seconds = 30 minutes)" -ForegroundColor Cyan
+            Write-Host "Cache expiration reset to default ($($script:Defaults.CacheExpirationSeconds) seconds = 30 minutes)" -ForegroundColor Cyan
         } else {
             Write-Host "Cache expiration was already set to default" -ForegroundColor Cyan
         }
@@ -1632,7 +1738,7 @@ function neofetch {
     if ($defaultprofile) {
         $profileChanged = Reset-ProfileNameDefault
         if ($profileChanged) {
-            Write-Host "Profile name reset to default (Windows PowerShell)" -ForegroundColor Cyan
+            Write-Host "Profile name reset to default ($($script:Defaults.ProfileName))" -ForegroundColor Cyan
         } else {
             Write-Host "Profile name was already set to default" -ForegroundColor Cyan
         }
@@ -1642,7 +1748,7 @@ function neofetch {
     if ($defaultthreads) {
         $threadsChanged = Reset-ThreadsDefault
         if ($threadsChanged) {
-            Write-Host "Threads reset to default (4)" -ForegroundColor Cyan
+            Write-Host "Threads reset to default ($($script:Defaults.MaxThreads))" -ForegroundColor Cyan
         } else {
             Write-Host "Threads were already set to default" -ForegroundColor Cyan
         }
@@ -1682,7 +1788,7 @@ function neofetch {
             Write-Host "Cache Age: $cacheMinutes minutes old" -ForegroundColor Cyan
             
             $cacheExpirationPath = Join-Path $env:USERPROFILE ".neofetch_cache_expiration"
-            [int]$defaultExpiration = 1800
+            [int]$defaultExpiration = $script:Defaults.CacheExpirationSeconds
             [int]$configuredExpiration = $defaultExpiration
             
             if (Test-Path $cacheExpirationPath) {
@@ -1697,7 +1803,7 @@ function neofetch {
             $expirationMinutes = [Math]::Round($configuredExpiration / 60, 1)
             Write-Host "Cache Expiration: $configuredExpiration seconds ($expirationMinutes minutes)" -ForegroundColor Cyan
             if ($configuredExpiration -ne $defaultExpiration) {
-                Write-Host "  - Custom expiration setting (default is 1800 seconds = 30 minutes)" -ForegroundColor White
+                Write-Host "  - Custom expiration setting (default is $defaultExpiration seconds = 30 minutes)" -ForegroundColor White
             }
             
             try {
@@ -1716,7 +1822,7 @@ function neofetch {
         }
         
         $threadsSavePath = Join-Path $env:USERPROFILE ".neofetch_threads"
-        [int]$defaultThreads = 4
+        [int]$defaultThreads = $script:Defaults.MaxThreads
         [int]$configuredThreads = $defaultThreads
         
         if ($maxThreads -gt 0) {
@@ -1741,7 +1847,7 @@ function neofetch {
         Write-Host "  - Actually using: $actualThreads threads (of $([Environment]::ProcessorCount) available)" -ForegroundColor White
         
         $profileNamePath = Join-Path $env:USERPROFILE ".neofetch_profile_name"
-        $defaultProfileName = "Windows PowerShell"
+        $defaultProfileName = $script:Defaults.ProfileName
         $configuredProfileName = $defaultProfileName
 
         if ($profileName) {
@@ -1761,6 +1867,15 @@ function neofetch {
         if ($configuredProfileName -ne $defaultProfileName) {
             Write-Host "  - Custom profile setting (default is $defaultProfileName)" -ForegroundColor White
         }
+        
+        # S8: Show recent errors if any (diagnostic enhancement)
+        if ($script:LastErrors.Count -gt 0) {
+            Write-Host "`nRecent Errors (for diagnostics):" -ForegroundColor Yellow
+            foreach ($key in $script:LastErrors.Keys) {
+                Write-Host "  ${key}: $($script:LastErrors[$key])" -ForegroundColor Gray
+            }
+        }
+        
         return
     }
 
@@ -1902,7 +2017,14 @@ function neofetch {
     $endTime = Get-Date
     $executionTime = ($endTime - $startTime).TotalSeconds
     
-    Write-Host "Script execution time: $executionTime seconds" -ForegroundColor Gray
+    # S17: Consider making this -Verbose only in future (Phase 4)
+    Write-Verbose "Script execution time: $executionTime seconds"
 }
 
+#endregion
+
+#region Module Exports
+
 Export-ModuleMember -Function neofetch
+
+#endregion

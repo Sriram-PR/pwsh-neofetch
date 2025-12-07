@@ -9,7 +9,7 @@
 </p>
 <br />
 
-A feature-rich PowerShell implementation of the popular Neofetch system information tool for Windows. This script/module displays system information with customizable ASCII art in your terminal, similar to the original Neofetch but designed specifically for Windows environments.
+A feature-rich PowerShell implementation of the popular Neofetch system information tool for Windows. This module displays system information with customizable ASCII art in your terminal, similar to the original Neofetch but designed specifically for Windows environments.
 
 ## Features
 
@@ -19,6 +19,7 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 - 🔄 Smart caching system to reduce load times
 - 📱 Terminal profile detection for accurate font information
 - 📉 Built-in system benchmarking utility
+- 📈 Live system monitoring with real-time graphs
 - 🧩 Minimal view option for essential information only
 - 🛠️ Configuration wizard for easy setup
 
@@ -26,52 +27,61 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 
 ### From PowerShell Gallery (Recommended)
 
+The easiest way to install pwsh-neofetch is from the PowerShell Gallery:
+
 ```powershell
 Install-Module -Name pwsh-neofetch
 ```
 
-### From GitHub
+To update to the latest version:
+
+```powershell
+Update-Module -Name pwsh-neofetch
+```
+
+### Alternative: Install from GitHub
+
+If you cannot access PowerShell Gallery (corporate firewall, air-gapped systems) or want to test a development version:
 
 ```powershell
 # Clone the repository
 git clone https://github.com/Sriram-PR/pwsh-neofetch.git
+cd pwsh-neofetch
 
-# Run the installer script
+# Run the installer
 .\direct-installer.ps1
+```
 
-# To uninstall, run
+To uninstall:
+
+```powershell
 .\direct-uninstaller.ps1
 ```
 
 ## Troubleshooting Installation
 
-If the `neofetch` command isn't recognized after installation (this issue may occur only when installing from the PowerShell Gallery), try these steps:
+If the `neofetch` command isn't recognized after installation, try these steps:
 
-1. Make sure the module is loaded:
+1. **Restart your PowerShell session** - The module may not be loaded in existing sessions.
+
+2. **Manually import the module:**
+
    ```powershell
    Import-Module pwsh-neofetch
    ```
 
-2. If the command still doesn't work, this may be due to a module path issue. You can fix it by:
+3. **If using OneDrive folder sync** - OneDrive's "Known Folder Move" feature can cause path issues on some systems. Run the module relocator:
+
    ```powershell
-   # Clone the repository
-   git clone https://github.com/Sriram-PR/pwsh-neofetch.git
-   
-   # Navigate to the directory
-   cd pwsh-neofetch
-   
-   # Run the module relocator script
-   .\module-relocator.ps1
+   # From the cloned repository
+   .\module_relocator.ps1
    ```
 
-3. Close and reopen your PowerShell session
+4. **Verify installation:**
 
-4. Try running the command again:
    ```powershell
-   neofetch
+   Get-Module -ListAvailable pwsh-neofetch
    ```
-
-This solves a common issue where the module is installed but not properly located in your PowerShell module path.
 
 ## Quick Start
 
@@ -83,16 +93,7 @@ neofetch
 
 <p align="center"><img alt="neofetch-basic" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-basic.png" width="600px"></p>
 
-On a fresh install, this command will automatically launch the configuration wizard to help you set up your preferences.
-
-## Configuration Options
-
-All configuration is stored in your user profile directory:
-
-- `.neofetch_ascii` - Custom ASCII art
-- `.neofetch_cache_expiration` - Cache expiration time in seconds
-- `.neofetch_threads` - Maximum thread count
-- `.neofetch_profile_name` - Windows Terminal profile name
+On first run, the configuration wizard will launch automatically to help you set up your preferences.
 
 ## Usage
 
@@ -118,105 +119,137 @@ neofetch [options]
 | `-nocache` | Disable caching and force fresh data collection |
 | `-minimal` | Display minimal view with essential system info only |
 | `-benchmark` | Run a system benchmark and display results |
+| `-live` | Display live CPU, RAM, GPU, and VRAM usage graphs |
 | `-reload` | Reset all configuration files and caches |
 | `-help` | Display help message |
 
-## Examples
+### Examples
 
-Basic usage:
 ```powershell
+# Basic usage
 neofetch
-```
 
-Force reconfiguration:
-```powershell
-neofetch -init -Force
-```
+# Run configuration wizard
+neofetch -init
 
-Using custom ASCII art:
-```powershell
-neofetch -asciiart "C:\path\to\ascii\art.txt"
-```
-
-Display minimal information:
-```powershell
+# Display minimal information
 neofetch -minimal
-```
 
-Run system benchmark:
-```powershell
+# Use custom ASCII art
+neofetch -asciiart "C:\path\to\ascii\art.txt"
+
+# Run system benchmark
 neofetch -benchmark
+
+# Live system monitoring
+neofetch -live
+
+# View current configuration
+neofetch -changes
+
+# Force fresh data (bypass cache)
+neofetch -nocache
 ```
 
-View current configuration:
+## Configuration
+
+All configuration is stored in your user profile directory (`$env:USERPROFILE`):
+
+| File | Purpose |
+|------|---------|
+| `.neofetch_ascii` | Custom ASCII art |
+| `.neofetch_cache_expiration` | Cache expiration time in seconds |
+| `.neofetch_threads` | Maximum thread count |
+| `.neofetch_profile_name` | Windows Terminal profile name |
+
+To reset all configuration to defaults:
+
 ```powershell
-neofetch -changes
+neofetch -reload
 ```
 
 ## Custom ASCII Art
 
-You can create your own ASCII art text files to use with the script.
+You can use your own ASCII art by creating a text file and pointing to it:
 
-Example of a simple ASCII art file:
+```powershell
+neofetch -asciiart "C:\path\to\ascii\art.txt"
+```
+
+Example ASCII art file:
+
 ```
 ⣾⡻⡃⣿⣿⠸⢣⣾⢸⡸⣿⣿⢹⣿⣿⣿⠘⣿⣿⣿⢈⣿⢸⣿⣷⣭⣿⣿⡇⣿
 ⠃⣾⠃⣿⡏⢇⣮⣟⠸⡇⣿⣿⢸⠿⣿⣿⣤⢿⣿⣿⢸⢹⡆⡟⣸⣿⡟⣿⡇⣿
 ⢰⣿⠄⣿⡇⡜⠛⠛⠿⢤⢹⣿⣼⢀⣿⡏⠿⠄⣿⠟⣰⣦⢧⢱⣿⣿⠳⣿⠃⣿
-⡜⣿⡆⣿⡇⣿⣿⣷⣶⣾⣦⣄⣧⣸⡸⢧⣿⡨⠩⠦⠿⠿⡼⢸⣿⡿⣄⢈⡆⢸
-⠹⣿⡇⣿⡇⣿⣿⣿⣿⣿⣿⣿⢻⣿⣿⣿⣶⣶⣶⣶⣶⣶⡆⣿⣿⢇⡟⣼⡧⣫
-⠄⢹⡇⣿⡇⣿⣿⣿⣿⣿⣿⣧⣤⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⢘⣾⣿⢷⠋
-⠄⠈⡇⣿⡇⣹⣿⣿⣿⣿⣿⣧⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢣⣿⡟⣾⣿⣿⠄⠄
-⠄⠄⢠⣿⡇⣷⠘⢿⣿⣧⡲⣾⣭⣭⣿⣒⠊⣹⣿⣿⡿⠁⣸⣿⡇⣿⣿⡏⡇⠄
-⠄⠄⠄⣿⡇⣿⠄⠄⠙⢿⣿⣷⣶⣶⣶⣾⣿⣿⠟⠋⠄⠄⣿⣿⢳⣿⣿⢹⡇⠄
-⠄⠄⠄⠘⣿⢸⢰⣆⠄⠄⠙⠻⣿⡿⠟⠛⠉⠄⠄⠄⠄⠄⣿⡟⣼⣿⢏⣿⢧⣷
 ```
 
-<h3 align="center"><img alt="logo" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-zerotwo.png" width="600px"></h3>
+<p align="center"><img alt="custom-ascii" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-zerotwo.png" width="600px"></p>
+
+## Live System Monitoring
+
+The `-live` flag displays real-time graphs for CPU, RAM, GPU, and VRAM usage:
+
+```powershell
+neofetch -live
+```
+
+Press `q` or `ESC` to exit the live view.
 
 ## System Benchmark
 
 The built-in benchmark evaluates:
-- CPU performance (prime number calculation)
-- Memory performance (array operations)
-- Disk I/O performance (read/write speeds)
+
+- **CPU performance** — Prime number calculation
+- **Memory performance** — Array operations
+- **Disk I/O performance** — Read/write speeds
 
 Results include individual scores and a composite rating.
 
+```powershell
+neofetch -benchmark
+```
+
 ## Requirements
 
-- Windows 7/Server 2008 R2 or later
-- PowerShell 5.1 or later
+- Windows 10/11 or Windows Server 2016+
+- PowerShell 5.1 or later (PowerShell 7+ recommended)
 
 ## Troubleshooting
 
 ### Cache Issues
-If you experience stale data, try:
+
+If you experience stale data:
+
 ```powershell
 neofetch -nocache
 ```
 
-### Performance Problems
-Adjust thread count to optimize for your system:
+### Performance Issues
+
+Adjust thread count for your system:
+
 ```powershell
 neofetch -maxThreads 2  # For less powerful systems
 neofetch -maxThreads 8  # For more powerful systems
 ```
 
-### Reset Configuration
+### Reset Everything
+
 To start fresh:
+
 ```powershell
 neofetch -reload
 ```
 
-## Roadmap / Planned Features
-
-These are the features I'm planning to implement in future releases:
+## Roadmap
 
 - [x] Multi-threaded system information collection
 - [x] Custom ASCII art support
 - [x] Caching system for improved performance
 - [x] System benchmarking utility
-- [x] Comparison mode to highlight system changes over time
+- [x] Live system monitoring graphs
+- [x] Configuration wizard
 - [ ] Color theme customization
 - [ ] User-configurable information display order
 - [ ] Export system information to file (JSON, CSV, TXT)
@@ -228,11 +261,11 @@ These are the features I'm planning to implement in future releases:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-This project is licensed under the [MIT License](https://github.com/Sriram-PR/pwsh-neofetch/blob/main/LICENSE).
+This project is licensed under the [MIT License](LICENSE).
 
 ## Acknowledgments
 

@@ -1,7 +1,7 @@
 @{
     RootModule = 'pwsh-neofetch.psm1'
     
-    ModuleVersion = '1.2.0'
+    ModuleVersion = '1.2.1'
     
     GUID = '4dc7d7d4-9924-4545-bd71-99932a7f6f8a'
     
@@ -19,11 +19,6 @@
     
     AliasesToExport = @()
     
-    # ModuleList = @()
-    
-    # FileList = @()
-    
-    # Private data to pass to the module specified in RootModule/ModuleToProcess
     PrivateData = @{
         PSData = @{
             Tags = @('windows', 'neofetch', 'system-info', 'terminal')
@@ -32,9 +27,7 @@
             
             ProjectUri = 'https://github.com/Sriram-PR/pwsh-neofetch/tree/main'
             
-            # IconUri = ''
-            
-            ReleaseNotes = 'v1.1.2 - Fixed username retrieval issue, improved compatibility on Windows Terminal'
+            ReleaseNotes = 'v1.2.1 - Refactored codebase, removed standalone script, added CI testing, improved error handling. See CHANGELOG.md for details.'
         }
     }
 }

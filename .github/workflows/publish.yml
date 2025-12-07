@@ -13,6 +13,64 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge '5.0.0' })) {
+            Write-Host "Installing Pester 5.x..." -ForegroundColor Cyan
+            Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+          Import-Module Pester -MinimumVersion 5.0.0
+          Write-Host "Pester version: $((Get-Module Pester).Version)"
+      
+      - name: Run tests
+        shell: pwsh
+        env:
+          SKIP_BENCHMARK_TESTS: 'true'
+        run: |
+          Write-Host "Running Pester tests..." -ForegroundColor Cyan
+          
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = './test-results.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.Output.Verbosity = 'Detailed'
+          
+          Invoke-Pester -Configuration $config
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: ./test-results.xml
+          retention-days: 30
+      
+      - name: Validate version matches release tag
+        shell: pwsh
+        run: |
+          # Extract version from manifest
+          $manifestPath = "./ps-gallery-build/pwsh-neofetch/pwsh-neofetch.psd1"
+          $manifest = Test-ModuleManifest -Path $manifestPath -ErrorAction Stop -WarningAction SilentlyContinue
+          $manifestVersion = $manifest.Version.ToString()
+          
+          # Extract version from git tag (remove 'v' prefix if present)
+          $gitTag = "${{ github.ref_name }}"
+          $tagVersion = $gitTag -replace '^v', ''
+          
+          Write-Host "Manifest version: $manifestVersion"
+          Write-Host "Git tag version:  $tagVersion (from tag: $gitTag)"
+          
+          if ($manifestVersion -ne $tagVersion) {
+            Write-Host "::error::Version mismatch! Manifest version ($manifestVersion) does not match git tag ($tagVersion)"
+            Write-Host "::error::Please update ModuleVersion in pwsh-neofetch.psd1 to match your release tag."
+            exit 1
+          }
+          
+          Write-Host "✓ Version validation passed: $manifestVersion"
+      
       - name: Prepare module for publishing
         shell: pwsh
         run: |
@@ -39,10 +97,15 @@ jobs:
       
       - name: Publish to PowerShell Gallery
         shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ secrets.PSGALLERY_KEY }}
         run: |
           # Set TLS 1.2 protocol for PowerShell Gallery compatibility
           [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
           
           Write-Host "Publishing module to PowerShell Gallery..." -ForegroundColor Cyan
-          Publish-Module -Path "./ps-gallery-build/pwsh-neofetch" -NuGetApiKey ${{ secrets.PSGALLERY_KEY }} -Verbose
+          
+          # Publish without -Verbose to prevent any potential credential exposure
+          Publish-Module -Path "./ps-gallery-build/pwsh-neofetch" -NuGetApiKey $env:NUGET_API_KEY
+          
           Write-Host "Module published successfully!" -ForegroundColor Green
