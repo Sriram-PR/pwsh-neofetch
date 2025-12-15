@@ -8,11 +8,24 @@
 # Module-level error tracking for diagnostics (S8)
 $script:LastErrors = @{}
 
-# Default configuration values
+# S12: Consolidated default configuration values
 $script:Defaults = @{
+    # Cache settings
     CacheExpirationSeconds = 1800
+    
+    # Threading
     MaxThreads = 4
+    
+    # Terminal profile
     ProfileName = "Windows PowerShell"
+    
+    # Live graph settings
+    LiveGraphRefreshSeconds = 2
+    LiveGraphHeight = 20
+    LiveGraphWidth = 80
+    
+    # ASCII art limits (S9)
+    MaxAsciiArtSizeKB = 20
 }
 
 #endregion
@@ -208,220 +221,10 @@ function Reset-NeofetchConfiguration {
         }
     }
     
-    $testFilePath = Join-Path $env:TEMP "neofetch_disk_test.dat"
-    if (Test-Path $testFilePath) {
-        Remove-Item -Path $testFilePath -Force
-        $reloadCount++
-    }
-    
     # Clear error tracking
     $script:LastErrors = @{}
     
     return $reloadCount
-}
-
-#endregion
-
-#region Benchmark Functions
-
-function Invoke-SystemBenchmark {
-    param (
-        [switch]$Quiet
-    )
-    
-    if (-not $Quiet) {
-        Write-Host "`nRunning system benchmark, please wait..." -ForegroundColor Cyan
-    }
-    
-    $benchmarkResults = @{}
-    $startTime = Get-Date
-    
-    # CPU Test
-    if (-not $Quiet) {
-        Write-Host "Running CPU test..." -ForegroundColor Gray
-    }
-    
-    $cpuStartTime = Get-Date
-    $primeCount = 0
-    
-    function Test-IsPrime {
-        param ([int]$number)
-        
-        if ($number -lt 2) { return $false }
-        if ($number -eq 2) { return $true }
-        if ($number % 2 -eq 0) { return $false }
-        
-        $boundary = [math]::Floor([math]::Sqrt($number))
-        
-        for ($i = 3; $i -le $boundary; $i += 2) {
-            if ($number % $i -eq 0) {
-                return $false
-            }
-        }
-        
-        return $true
-    }
-    
-    for ($i = 3; $i -lt 100000; $i += 2) {
-        if (Test-IsPrime -number $i) {
-            $primeCount++
-        }
-    }
-    
-    $cpuEndTime = Get-Date
-    $cpuSeconds = ($cpuEndTime - $cpuStartTime).TotalSeconds
-    $cpuScore = [math]::Round(($primeCount / $cpuSeconds) * 10, 2)
-    $benchmarkResults.CPU = @{
-        Score = $cpuScore
-        Time = $cpuSeconds
-        Unit = "primes/sec"
-        Raw = $primeCount
-    }
-    
-    # Memory Test
-    if (-not $Quiet) {
-        Write-Host "Running memory test..." -ForegroundColor Gray
-    }
-    
-    $memStartTime = Get-Date
-    $arraySize = 100000000
-    $memoryArray = New-Object object[] $arraySize
-    
-    for ($i = 0; $i -lt $arraySize; $i++) {
-        $memoryArray[$i] = $i
-    }
-    
-    $sum = 0
-    for ($i = 0; $i -lt $arraySize; $i++) {
-        $sum += $memoryArray[$i]
-    }
-    
-    $memEndTime = Get-Date
-    $memSeconds = ($memEndTime - $memStartTime).TotalSeconds
-    $memScore = [math]::Round(($arraySize / $memSeconds) / 10000, 2)
-    $benchmarkResults.Memory = @{
-        Score = $memScore
-        Time = $memSeconds
-        Unit = "MB/sec"
-        Raw = $arraySize
-    }
-    
-    # Disk Test
-    if (-not $Quiet) {
-        Write-Host "Running disk test..." -ForegroundColor Gray
-    }
-    
-    $diskStartTime = Get-Date
-    $testFilePath = Join-Path $env:TEMP "neofetch_disk_test.dat"
-    $testFileSize = 1024MB
-    
-    $writeTest = Measure-Command {
-        $randomData = New-Object byte[] $testFileSize
-        $rng = New-Object System.Security.Cryptography.RNGCryptoServiceProvider
-        $rng.GetBytes($randomData)
-        [System.IO.File]::WriteAllBytes($testFilePath, $randomData)
-    }
-    
-    $readTest = Measure-Command {
-        $data = [System.IO.File]::ReadAllBytes($testFilePath)
-    }
-    
-    if (Test-Path $testFilePath) {
-        Remove-Item -Path $testFilePath -Force
-    }
-    
-    $diskEndTime = Get-Date
-    $diskSeconds = ($diskEndTime - $diskStartTime).TotalSeconds
-    $writeSpeed = [math]::Round($testFileSize / $writeTest.TotalSeconds / 1MB, 2)
-    $readSpeed = [math]::Round($testFileSize / $readTest.TotalSeconds / 1MB, 2)
-    $diskScore = [math]::Round(($writeSpeed + $readSpeed) / 2, 2)
-    
-    $benchmarkResults.Disk = @{
-        Score = $diskScore
-        WriteSpeed = $writeSpeed
-        ReadSpeed = $readSpeed
-        Unit = "MB/sec"
-        Time = $diskSeconds
-    }
-    
-    # Composite score
-    $compositeScore = [math]::Round(
-        ($benchmarkResults.CPU.Score * 0.4) + 
-        ($benchmarkResults.Memory.Score * 0.3) + 
-        ($benchmarkResults.Disk.Score * 0.3), 
-    2)
-    
-    $ratingTable = @{
-        "Excellent" = 90
-        "Very Good" = 70
-        "Good" = 50
-        "Average" = 30
-        "Below Average" = 15
-        "Poor" = 0
-    }
-    
-    $rating = "Poor"
-    foreach ($kvp in $ratingTable.GetEnumerator() | Sort-Object -Property Value -Descending) {
-        if ($compositeScore -ge $kvp.Value) {
-            $rating = $kvp.Key
-            break
-        }
-    }
-    
-    $benchmarkResults.Composite = @{
-        Score = $compositeScore
-        Rating = $rating
-        Time = (Get-Date) - $startTime
-    }
-    
-    return $benchmarkResults
-}
-
-function Show-BenchmarkResults {
-    param (
-        [Parameter(Mandatory=$true)]
-        [hashtable]$Results
-    )
-    
-    $ESC = [char]27
-    $RESET = "$ESC[0m"
-    $BOLD = "$ESC[1m"
-    $CYAN = "$ESC[36m"
-    $GREEN = "$ESC[32m"
-    $YELLOW = "$ESC[33m"
-    $RED = "$ESC[31m"
-    
-    Write-Host "`n$BOLD${CYAN}System Benchmark Results:$RESET"
-    Write-Host ""
-    
-    Write-Host "$BOLD${CYAN}CPU Performance:$RESET"
-    Write-Host "  Score: $($Results.CPU.Score) ($($Results.CPU.Unit))"
-    Write-Host "  Time: $($Results.CPU.Time) seconds"
-    
-    Write-Host "`n$BOLD${CYAN}Memory Performance:$RESET"
-    Write-Host "  Score: $($Results.Memory.Score) ($($Results.Memory.Unit))"
-    Write-Host "  Time: $($Results.Memory.Time) seconds"
-    
-    Write-Host "`n$BOLD${CYAN}Disk I/O Performance:$RESET"
-    Write-Host "  Score: $($Results.Disk.Score) ($($Results.Disk.Unit))"
-    Write-Host "  Write: $($Results.Disk.WriteSpeed) MB/sec"
-    Write-Host "  Read: $($Results.Disk.ReadSpeed) MB/sec"
-    
-    $ratingColor = switch ($Results.Composite.Rating) {
-        "Excellent" { $GREEN }
-        "Very Good" { $GREEN }
-        "Good" { $GREEN }
-        "Average" { $YELLOW }
-        "Below Average" { $YELLOW }
-        "Poor" { $RED }
-        default { $RESET }
-    }
-    
-    Write-Host "`n$BOLD${CYAN}Overall Performance:$RESET"
-    Write-Host "  Composite Score: $($Results.Composite.Score)"
-    Write-Host "  Rating: $ratingColor$($Results.Composite.Rating)$RESET"
-    Write-Host "  Total Benchmark Time: $($Results.Composite.Time.TotalSeconds) seconds"
-    Write-Host ""
 }
 
 #endregion
@@ -945,9 +748,9 @@ function Get-DefaultAsciiArt {
 function Show-LiveUsageGraphs {
     param (
         [ValidateRange(0.1, 60)]
-        [double]$RefreshRateSeconds = 2,
-        [int]$GraphHeightParam = 20,
-        [int]$GraphWidthParam = 80
+        [double]$RefreshRateSeconds = $script:Defaults.LiveGraphRefreshSeconds,
+        [int]$GraphHeightParam = $script:Defaults.LiveGraphHeight,
+        [int]$GraphWidthParam = $script:Defaults.LiveGraphWidth
     )
     
     $ESC = [char]27
@@ -1454,6 +1257,10 @@ function Get-ASCIIArt {
     $changesMade = $false
     $changeDescription = ""
     $hasColors = $false
+    
+    # S9: Max file size from defaults (in KB)
+    $maxFileSizeKB = $script:Defaults.MaxAsciiArtSizeKB
+    $maxFileSizeBytes = $maxFileSizeKB * 1024
 
     if ($UseDefaultArt) {
         if (Test-Path $asciiSavePath) {
@@ -1472,6 +1279,28 @@ function Get-ASCIIArt {
     }
 
     if ($CustomArtPath -and (Test-Path $CustomArtPath)) {
+        # S9: Validate the path and file
+        $validationResult = Test-AsciiArtPath -Path $CustomArtPath -MaxSizeBytes $maxFileSizeBytes
+        
+        if (-not $validationResult.IsValid) {
+            # Validation failed - warn and fall back to default
+            Write-Warning $validationResult.Message
+            Write-Warning "Falling back to default ASCII art."
+            
+            $defaultArt = Get-DefaultAsciiArt
+            return @{
+                Art = $defaultArt
+                Changed = $false
+                ChangeDescription = "Validation failed: $($validationResult.Message)"
+                HasColors = $false
+            }
+        }
+        
+        # Show warning if path contains traversal (but still allow it per decision #2)
+        if ($validationResult.HasTraversal) {
+            Write-Warning $validationResult.Message
+        }
+        
         $art = Get-Content -Path $CustomArtPath -Raw -Encoding UTF8
         $artLines = $art -split "`n" | ForEach-Object { $_.TrimEnd() }
         
@@ -1511,6 +1340,68 @@ function Get-ASCIIArt {
         ChangeDescription = $changeDescription
         HasColors = $hasColors
     }
+}
+
+# S9: New validation function for ASCII art paths
+function Test-AsciiArtPath {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        
+        [Parameter(Mandatory = $true)]
+        [int]$MaxSizeBytes
+    )
+    
+    $result = @{
+        IsValid = $true
+        Message = ""
+        HasTraversal = $false
+    }
+    
+    # Check if path exists
+    if (-not (Test-Path $Path)) {
+        $result.IsValid = $false
+        $result.Message = "ASCII art file not found: $Path"
+        return $result
+    }
+    
+    # Resolve to full path and check if it's a file (not directory)
+    $resolvedPath = Resolve-Path $Path -ErrorAction SilentlyContinue
+    if (-not $resolvedPath) {
+        $result.IsValid = $false
+        $result.Message = "Unable to resolve path: $Path"
+        return $result
+    }
+    
+    $item = Get-Item $resolvedPath.Path -ErrorAction SilentlyContinue
+    if (-not $item) {
+        $result.IsValid = $false
+        $result.Message = "Unable to access file: $Path"
+        return $result
+    }
+    
+    if ($item.PSIsContainer) {
+        $result.IsValid = $false
+        $result.Message = "Path is a directory, not a file: $Path"
+        return $result
+    }
+    
+    # Check file size
+    if ($item.Length -gt $MaxSizeBytes) {
+        $fileSizeKB = [Math]::Round($item.Length / 1024, 2)
+        $maxSizeKB = [Math]::Round($MaxSizeBytes / 1024, 2)
+        $result.IsValid = $false
+        $result.Message = "ASCII art file too large: ${fileSizeKB}KB (maximum: ${maxSizeKB}KB)"
+        return $result
+    }
+    
+    # Check for path traversal (warn but don't block per decision #2)
+    if ($Path -match '\.\.[\\/]') {
+        $result.HasTraversal = $true
+        $result.Message = "Path contains directory traversal ('..') - proceeding with caution: $Path"
+    }
+    
+    return $result
 }
 
 function Get-ProcessedASCIIArt {
@@ -1569,18 +1460,18 @@ function Show-Usage {
     Write-Host "  -Force               Force reconfiguration even if config files already exist (use with -init)." -ForegroundColor White
     Write-Host "  -asciiart <path>     Path to a text file containing ASCII art to use instead of the default Windows logo." -ForegroundColor White
     Write-Host "                       The ASCII art can contain ANSI color codes for colored output." -ForegroundColor White
+    Write-Host "                       Maximum file size: $($script:Defaults.MaxAsciiArtSizeKB)KB" -ForegroundColor White
     Write-Host "  -defaultart          Reset to use the default Windows ASCII art, removing any custom art." -ForegroundColor White
     Write-Host "  -changes             Display information about what configurations have been changed from default." -ForegroundColor White
-    Write-Host "  -maxThreads <n>      Limit the maximum number of threads used (default: 4 or number of CPU cores, whichever is lower)." -ForegroundColor White
-    Write-Host "  -defaultthreads      Reset to use the default number of threads (4)." -ForegroundColor White
+    Write-Host "  -maxThreads <n>      Limit the maximum number of threads used (default: $($script:Defaults.MaxThreads) or number of CPU cores, whichever is lower)." -ForegroundColor White
+    Write-Host "  -defaultthreads      Reset to use the default number of threads ($($script:Defaults.MaxThreads))." -ForegroundColor White
     Write-Host "  -profileName <name>  Set the Windows Terminal profile name to use for font detection." -ForegroundColor White
     Write-Host "                       Common values are 'Windows PowerShell' or 'PowerShell'" -ForegroundColor White
-    Write-Host "  -defaultprofile      Reset terminal profile to default (Windows PowerShell)." -ForegroundColor White
-    Write-Host "  -cacheExpiration <n> Set the cache expiration period in seconds (default: 1800 = 30 min)." -ForegroundColor White
-    Write-Host "  -defaultcache        Reset cache expiration to default (1800 seconds = 30 minutes)." -ForegroundColor White
+    Write-Host "  -defaultprofile      Reset terminal profile to default ($($script:Defaults.ProfileName))." -ForegroundColor White
+    Write-Host "  -cacheExpiration <n> Set the cache expiration period in seconds (default: $($script:Defaults.CacheExpirationSeconds) = 30 min)." -ForegroundColor White
+    Write-Host "  -defaultcache        Reset cache expiration to default ($($script:Defaults.CacheExpirationSeconds) seconds = 30 minutes)." -ForegroundColor White
     Write-Host "  -nocache             Disable caching and force fresh data collection." -ForegroundColor White
     Write-Host "  -minimal             Display a minimal view with only essential system information." -ForegroundColor White
-    Write-Host "  -benchmark           Run a system benchmark and display results." -ForegroundColor White
     Write-Host "  -live                Display live CPU, RAM, GPU, and VRAM usage graphs." -ForegroundColor White
     Write-Host "  -reload              Reset all configuration files and caches to defaults." -ForegroundColor White
     Write-Host "  -help                Display this help message." -ForegroundColor White
@@ -1594,7 +1485,6 @@ function Show-Usage {
     Write-Host "  neofetch -profileName `"PowerShell`"" -ForegroundColor White
     Write-Host "  neofetch -changes" -ForegroundColor White
     Write-Host "  neofetch -maxThreads 8" -ForegroundColor White
-    Write-Host "  neofetch -benchmark" -ForegroundColor White
     Write-Host "  neofetch -live" -ForegroundColor White
     Write-Host ""
 }
@@ -1603,7 +1493,8 @@ function Show-Usage {
 
 #region Main Function
 
-function neofetch {
+# S14: Renamed from 'neofetch' to 'Invoke-Neofetch' for Verb-Noun compliance
+function Invoke-Neofetch {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$false)]
@@ -1643,9 +1534,6 @@ function neofetch {
         [switch]$minimal = $false,
 
         [Parameter(Mandatory=$false)]
-        [switch]$benchmark = $false,
-
-        [Parameter(Mandatory=$false)]
         [switch]$reload = $false,
 
         [Parameter(Mandatory=$false)]
@@ -1679,7 +1567,7 @@ function neofetch {
     )
 
     if ($isFirstRun -and -not ($help -or $changes -or $defaultart -or $maxThreads -or $defaultthreads -or $nocache -or 
-        $cacheExpiration -or $defaultcache -or $profileName -or $defaultprofile -or $minimal -or $benchmark -or 
+        $cacheExpiration -or $defaultcache -or $profileName -or $defaultprofile -or $minimal -or 
         $reload -or $asciiart -or $live)) {
         Write-Host "${BOLD}${CYAN}First run detected!${RESET} Starting initial setup..." -ForegroundColor Cyan
         Start-Sleep -Seconds 1
@@ -1702,12 +1590,6 @@ function neofetch {
 
     if ($help) {
         Show-Usage
-        return
-    }
-
-    if ($benchmark) {
-        $benchmarkResults = Invoke-SystemBenchmark
-        Show-BenchmarkResults -Results $benchmarkResults
         return
     }
 
@@ -2025,6 +1907,9 @@ function neofetch {
 
 #region Module Exports
 
-Export-ModuleMember -Function neofetch
+# S14: Export the Verb-Noun compliant function and create backward-compatible alias
+New-Alias -Name 'neofetch' -Value 'Invoke-Neofetch' -Force -Scope Global
+
+Export-ModuleMember -Function Invoke-Neofetch -Alias neofetch
 
 #endregion

@@ -1,7 +1,7 @@
 @{
     RootModule = 'pwsh-neofetch.psm1'
     
-    ModuleVersion = '1.2.1'
+    ModuleVersion = '1.3.0'
     
     GUID = '4dc7d7d4-9924-4545-bd71-99932a7f6f8a'
     
@@ -11,13 +11,13 @@
     
     PowerShellVersion = '5.1'
     
-    FunctionsToExport = @('neofetch')
+    FunctionsToExport = @('Invoke-Neofetch')
     
     CmdletsToExport = @()
     
-    VariablesToExport = '*'
+    VariablesToExport = @()
     
-    AliasesToExport = @()
+    AliasesToExport = @('neofetch')
     
     PrivateData = @{
         PSData = @{
@@ -27,7 +27,7 @@
             
             ProjectUri = 'https://github.com/Sriram-PR/pwsh-neofetch/tree/main'
             
-            ReleaseNotes = 'v1.2.1 - Refactored codebase, removed standalone script, added CI testing, improved error handling. See CHANGELOG.md for details.'
+            ReleaseNotes = 'v1.3.0 - Renamed function to Invoke-Neofetch (neofetch alias preserved), removed benchmark feature, added ASCII art validation, consolidated configuration defaults. See CHANGELOG.md for details.'
         }
     }
 }

@@ -18,30 +18,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration with hardware monitoring tools
 - Localization support for multiple languages
 
+## [1.3.0] - 2025-XX-XX
+
+### Added
+
+- `Invoke-Neofetch` function name following PowerShell Verb-Noun convention (S14)
+- ASCII art file validation with 20KB size limit (S9)
+- Path traversal detection with warning for `-asciiart` parameter (S9)
+- Consolidated `$script:Defaults` hashtable for all configuration values (S12)
+- Live graph default settings in configuration (S12)
+
+### Changed
+
+- **Breaking:** Primary function renamed from `neofetch` to `Invoke-Neofetch`
+  - The `neofetch` alias is automatically created for backward compatibility
+  - Users calling `neofetch` directly will not be affected
+- `VariablesToExport` changed from `'*'` to `@()` to prevent namespace pollution (S11)
+- Help text now references centralized default values (S12)
+
+### Removed
+
+- **Breaking:** Benchmark feature (`-benchmark` parameter) removed entirely (S10)
+  - `Invoke-SystemBenchmark` function removed
+  - `Show-BenchmarkResults` function removed
+  - Users requiring benchmarking should use dedicated tools (CrystalDiskMark, etc.)
+
+### Fixed
+
+- ASCII art validation now fails gracefully with fallback to default art (S9)
+- Clear error messages for ASCII art file issues (not found, too large, is directory)
+
 ## [1.2.1] - 2025-XX-XX
 
 ### Added
 
 - CONTRIBUTING.md with development setup and release process documentation
 - CHANGELOG.md for version history tracking
+- Pester test suite for CI validation
+- CI version validation (manifest must match git tag)
 
 ### Changed
 
 - Refactored codebase for improved maintainability
 - Removed standalone script in favor of module-only distribution
-- Improved CI/CD pipeline with version validation
+- Improved CI/CD pipeline with tests before publish
 - Enhanced error handling with verbose diagnostic output
 
 ### Fixed
 
-- Version and release notes mismatch in module manifest
-- Potential secret exposure in CI workflow
-- Variable scope issue in live graphs error handling
+- Version and release notes mismatch in module manifest (S2)
+- Variable scope issue in live graphs error handling (S7)
+- Silent error swallowing now logs to verbose stream (S8)
 
 ### Security
 
-- Removed `-Verbose` flag from publish workflow to prevent credential leakage
-- Added version-tag validation to prevent release mismatches
+- Removed `-Verbose` flag from publish workflow to prevent credential leakage (S4)
+- Added version-tag validation to prevent release mismatches (S5)
 
 ## [1.2.0] - 2025-XX-XX
 
@@ -102,7 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Color block display
 - Windows logo ASCII art
 
-[Unreleased]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.1.1...v1.1.2
