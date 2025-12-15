@@ -18,7 +18,6 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 - ⚡ Multi-threaded data collection for improved performance
 - 🔄 Smart caching system to reduce load times
 - 📱 Terminal profile detection for accurate font information
-- 📉 Built-in system benchmarking utility
 - 📈 Live system monitoring with real-time graphs
 - 🧩 Minimal view option for essential information only
 - 🛠️ Configuration wizard for easy setup
@@ -101,13 +100,15 @@ On first run, the configuration wizard will launch automatically to help you set
 neofetch [options]
 ```
 
+> **Note:** `neofetch` is an alias for `Invoke-Neofetch`. Both commands work identically.
+
 ### Available Options
 
 | Option | Description |
 |--------|-------------|
 | `-init` | Run the configuration wizard |
 | `-Force` | Force reconfiguration even if config files exist |
-| `-asciiart <path>` | Path to a text file containing custom ASCII art |
+| `-asciiart <path>` | Path to a text file containing custom ASCII art (max 20KB) |
 | `-defaultart` | Reset to default Windows ASCII art |
 | `-changes` | Display information about current configuration |
 | `-maxThreads <n>` | Limit maximum threads used (default: 4 or CPU core count) |
@@ -118,7 +119,6 @@ neofetch [options]
 | `-defaultcache` | Reset cache expiration to default |
 | `-nocache` | Disable caching and force fresh data collection |
 | `-minimal` | Display minimal view with essential system info only |
-| `-benchmark` | Run a system benchmark and display results |
 | `-live` | Display live CPU, RAM, GPU, and VRAM usage graphs |
 | `-reload` | Reset all configuration files and caches |
 | `-help` | Display help message |
@@ -137,9 +137,6 @@ neofetch -minimal
 
 # Use custom ASCII art
 neofetch -asciiart "C:\path\to\ascii\art.txt"
-
-# Run system benchmark
-neofetch -benchmark
 
 # Live system monitoring
 neofetch -live
@@ -176,6 +173,11 @@ You can use your own ASCII art by creating a text file and pointing to it:
 neofetch -asciiart "C:\path\to\ascii\art.txt"
 ```
 
+**Limitations:**
+
+- Maximum file size: 20KB
+- Path traversal (`..`) will trigger a warning but is allowed
+
 Example ASCII art file:
 
 ```
@@ -195,20 +197,6 @@ neofetch -live
 ```
 
 Press `q` or `ESC` to exit the live view.
-
-## System Benchmark
-
-The built-in benchmark evaluates:
-
-- **CPU performance** — Prime number calculation
-- **Memory performance** — Array operations
-- **Disk I/O performance** — Read/write speeds
-
-Results include individual scores and a composite rating.
-
-```powershell
-neofetch -benchmark
-```
 
 ## Requirements
 
@@ -247,7 +235,6 @@ neofetch -reload
 - [x] Multi-threaded system information collection
 - [x] Custom ASCII art support
 - [x] Caching system for improved performance
-- [x] System benchmarking utility
 - [x] Live system monitoring graphs
 - [x] Configuration wizard
 - [ ] Color theme customization
