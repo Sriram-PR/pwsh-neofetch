@@ -67,8 +67,7 @@ Describe 'Module Manifest' {
         $manifest.ExportedAliases.Keys | Should -Contain 'neofetch'
     }
     
-    It 'Does not export variables (S11)' {
-        # VariablesToExport should be empty
+    It 'Does not export variables' {
         $manifest.ExportedVariables.Count | Should -Be 0
     }
 }
@@ -105,6 +104,19 @@ Describe 'Module Import' {
         $command = Get-Command -Name 'Invoke-Neofetch'
         $command.Parameters.Keys | Should -Not -Contain 'benchmark'
     }
+    
+    # S19: New parameter test
+    It 'Has AsObject parameter' {
+        $command = Get-Command -Name 'Invoke-Neofetch'
+        $command.Parameters.Keys | Should -Contain 'AsObject'
+    }
+    
+    # S16: SupportsShouldProcess test
+    It 'Supports -WhatIf and -Confirm' {
+        $command = Get-Command -Name 'Invoke-Neofetch'
+        $command.Parameters.Keys | Should -Contain 'WhatIf'
+        $command.Parameters.Keys | Should -Contain 'Confirm'
+    }
 }
 
 Describe 'Core Functions' {
@@ -131,7 +143,7 @@ Describe 'Core Functions' {
         }
     }
     
-    Context 'Module Defaults (S12)' {
+    Context 'Module Defaults' {
         It 'Has consolidated defaults hashtable' {
             $defaults = & (Get-Module pwsh-neofetch) { $script:Defaults }
             $defaults | Should -Not -BeNullOrEmpty
@@ -159,7 +171,7 @@ Describe 'Core Functions' {
     }
 }
 
-Describe 'ASCII Art Validation (S9)' {
+Describe 'ASCII Art Validation' {
     BeforeAll {
         # Create temp files for testing
         $script:testDir = Join-Path $env:TEMP "neofetch_tests_$(Get-Random)"
@@ -224,8 +236,6 @@ Describe 'ASCII Art Validation (S9)' {
         }
         
         It 'Detects path traversal but allows it with warning' {
-            # Create a path with traversal that resolves to the valid file
-            # e.g., C:\Temp\neofetch_tests_123\..\neofetch_tests_123\valid_art.txt
             $dirName = Split-Path $script:testDir -Leaf
             $traversalPath = Join-Path $script:testDir "..\\$dirName\valid_art.txt"
             
@@ -233,7 +243,6 @@ Describe 'ASCII Art Validation (S9)' {
                 Test-AsciiArtPath -Path $args[0] -MaxSizeBytes (20 * 1024) 
             } $traversalPath
             
-            # Should be valid but flag the traversal
             $result.IsValid | Should -Be $true
             $result.HasTraversal | Should -Be $true
             $result.Message | Should -Match 'traversal'
@@ -291,6 +300,77 @@ Describe 'System Info Collection' {
     }
 }
 
+Describe 'AsObject Parameter' {
+    Context 'Invoke-Neofetch -AsObject' {
+        BeforeAll {
+            $script:objectResult = Invoke-Neofetch -AsObject -nocache
+        }
+        
+        It 'Returns a PSCustomObject' {
+            $script:objectResult | Should -BeOfType [PSCustomObject]
+        }
+        
+        It 'Has correct PSTypeName' {
+            $script:objectResult.PSTypeNames | Should -Contain 'Neofetch.SystemInfo'
+        }
+        
+        It 'Contains all expected properties' {
+            $expectedProperties = @(
+                'UserName', 'HostName', 'OS', 'Host', 'Kernel', 'Uptime',
+                'Packages', 'Shell', 'Resolution', 'WM', 'Terminal',
+                'TerminalFont', 'CPU', 'GPU', 'GPUMemory', 'Memory',
+                'DiskUsage', 'Battery', 'CollectedAt'
+            )
+            
+            foreach ($prop in $expectedProperties) {
+                $script:objectResult.PSObject.Properties.Name | Should -Contain $prop
+            }
+        }
+        
+        It 'CollectedAt is a DateTime' {
+            $script:objectResult.CollectedAt | Should -BeOfType [DateTime]
+        }
+        
+        It 'Can be converted to JSON' {
+            { $script:objectResult | ConvertTo-Json } | Should -Not -Throw
+        }
+        
+        It 'Can be piped to Select-Object' {
+            $selected = $script:objectResult | Select-Object OS, CPU, Memory
+            $selected.OS | Should -Not -BeNullOrEmpty
+            $selected.CPU | Should -Not -BeNullOrEmpty
+            $selected.Memory | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'WhatIf Support' {
+    Context 'Reset-NeofetchConfiguration with -WhatIf' {
+        It 'Does not delete files when -WhatIf is specified' {
+            # Test the internal function directly
+            $fileExists = & (Get-Module pwsh-neofetch) {
+                # Create a config file to test
+                $testPath = Join-Path $env:USERPROFILE ".neofetch_threads"
+                "4" | Out-File $testPath -Force
+                
+                # Call Reset with WhatIf (suppress output)
+                $null = Reset-NeofetchConfiguration -WhatIf
+                
+                # Return whether file still exists
+                return (Test-Path $testPath)
+            }
+            
+            $fileExists | Should -Be $true
+            
+            # Cleanup
+            $threadsPath = Join-Path $env:USERPROFILE ".neofetch_threads"
+            if (Test-Path $threadsPath) {
+                Remove-Item $threadsPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 Describe 'Help Parameter' {
     It 'neofetch -help does not throw' {
         { neofetch -help } | Should -Not -Throw
@@ -307,15 +387,50 @@ Describe 'Configuration Functions' {
             $func = & (Get-Module pwsh-neofetch) { Get-Command Reset-NeofetchConfiguration -ErrorAction SilentlyContinue }
             $func | Should -Not -BeNullOrEmpty
         }
+        
+        It 'Has SupportsShouldProcess attribute' {
+            # Check for WhatIf parameter existence (indicates SupportsShouldProcess)
+            $hasWhatIf = & (Get-Module pwsh-neofetch) { 
+                $cmd = Get-Command Reset-NeofetchConfiguration
+                $cmd.Parameters.ContainsKey('WhatIf')
+            }
+            $hasWhatIf | Should -Be $true
+        }
+    }
+    
+    Context 'Initialize-NeofetchConfig' {
+        It 'Has SupportsShouldProcess attribute' {
+            # Check for WhatIf parameter existence (indicates SupportsShouldProcess)
+            $hasWhatIf = & (Get-Module pwsh-neofetch) { 
+                $cmd = Get-Command Initialize-NeofetchConfig
+                $cmd.Parameters.ContainsKey('WhatIf')
+            }
+            $hasWhatIf | Should -Be $true
+        }
     }
 }
 
 Describe 'Backward Compatibility' {
     It 'neofetch alias works the same as Invoke-Neofetch' {
-        # Both should resolve to the same command
         $aliasCmd = Get-Command neofetch
         $funcCmd = Get-Command Invoke-Neofetch
         
         $aliasCmd.Definition | Should -Be $funcCmd.Name
+    }
+}
+
+Describe 'Edge Cases' {
+    Context 'Empty or null inputs' {
+        It 'Handles empty asciiart path gracefully' {
+            { Invoke-Neofetch -asciiart "" -help } | Should -Not -Throw
+        }
+        
+        It 'Handles zero maxThreads' {
+            { Invoke-Neofetch -maxThreads 0 -help } | Should -Not -Throw
+        }
+        
+        It 'Handles zero cacheExpiration' {
+            { Invoke-Neofetch -cacheExpiration 0 -help } | Should -Not -Throw
+        }
     }
 }

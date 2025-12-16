@@ -18,64 +18,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Integration with hardware monitoring tools
 - Localization support for multiple languages
 
-## [1.3.0] - 2025-XX-XX
+## [1.3.0] - 2025-12-16
 
 ### Added
 
-- `Invoke-Neofetch` function name following PowerShell Verb-Noun convention (S14)
-- ASCII art file validation with 20KB size limit (S9)
-- Path traversal detection with warning for `-asciiart` parameter (S9)
-- Consolidated `$script:Defaults` hashtable for all configuration values (S12)
-- Live graph default settings in configuration (S12)
+- `Invoke-Neofetch` function name following PowerShell Verb-Noun convention
+- `-AsObject` parameter for structured PSObject output, enabling pipeline usage with `ConvertTo-Json`, `Export-Csv`, etc.
+- `-WhatIf` and `-Confirm` support for destructive operations like `-reload` and `-init`
+- ASCII art file validation with 20KB size limit
+- Path traversal detection with warning for `-asciiart` parameter
+- Consolidated `$script:Defaults` hashtable for all configuration values
+- Live graph default settings in configuration
+- Expanded Pester test coverage for new functionality
+- CONTRIBUTING.md with development setup and release process documentation
+- CHANGELOG.md for version history tracking
+- CI version validation (manifest must match git tag)
 
 ### Changed
 
 - **Breaking:** Primary function renamed from `neofetch` to `Invoke-Neofetch`
   - The `neofetch` alias is automatically created for backward compatibility
   - Users calling `neofetch` directly will not be affected
-- `VariablesToExport` changed from `'*'` to `@()` to prevent namespace pollution (S11)
-- Help text now references centralized default values (S12)
+- `VariablesToExport` changed from `'*'` to `@()` to prevent namespace pollution
+- `module_relocator.ps1` now uses registry-based OneDrive detection and recursive search, supporting all language localisations
+- Help text now references centralized default values
+- Refactored codebase for improved maintainability
+- Removed standalone script in favor of module-only distribution
+- Improved CI/CD pipeline with tests before publish
+- Enhanced error handling with verbose diagnostic output
 
 ### Removed
 
-- **Breaking:** Benchmark feature (`-benchmark` parameter) removed entirely (S10)
+- **Breaking:** Benchmark feature (`-benchmark` parameter) removed entirely
   - `Invoke-SystemBenchmark` function removed
   - `Show-BenchmarkResults` function removed
   - Users requiring benchmarking should use dedicated tools (CrystalDiskMark, etc.)
 
 ### Fixed
 
-- ASCII art validation now fails gracefully with fallback to default art (S9)
+- ASCII art validation now fails gracefully with fallback to default art
 - Clear error messages for ASCII art file issues (not found, too large, is directory)
-
-## [1.2.1] - 2025-XX-XX
-
-### Added
-
-- CONTRIBUTING.md with development setup and release process documentation
-- CHANGELOG.md for version history tracking
-- Pester test suite for CI validation
-- CI version validation (manifest must match git tag)
-
-### Changed
-
-- Refactored codebase for improved maintainability
-- Removed standalone script in favor of module-only distribution
-- Improved CI/CD pipeline with tests before publish
-- Enhanced error handling with verbose diagnostic output
-
-### Fixed
-
-- Version and release notes mismatch in module manifest (S2)
-- Variable scope issue in live graphs error handling (S7)
-- Silent error swallowing now logs to verbose stream (S8)
+- Version and release notes mismatch in module manifest
+- Variable scope issue in live graphs error handling
+- Silent error swallowing now logs to verbose stream
 
 ### Security
 
-- Removed `-Verbose` flag from publish workflow to prevent credential leakage (S4)
-- Added version-tag validation to prevent release mismatches (S5)
+- Removed `-Verbose` flag from publish workflow to prevent credential leakage
+- Added version-tag validation to prevent release mismatches
 
-## [1.2.0] - 2025-XX-XX
+## [1.2.0] - 2025-05-11
 
 ### Added
 
@@ -99,20 +91,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GPU detection now prioritizes discrete GPUs (NVIDIA, AMD) over integrated graphics
 - GPU memory reporting via `nvidia-smi` for NVIDIA cards
 
-## [1.1.2] - 2025-XX-XX
+## [1.1.2] - 2025-03-05
 
 ### Fixed
 
 - Username retrieval issue
 - Improved compatibility on Windows Terminal
 
-## [1.1.1] - 2025-XX-XX
+## [1.1.1] - 2025-03-01
 
 ### Changed
 
 - Minor stability improvements (v1.1 final)
 
-## [1.1.0] - 2025-XX-XX
+## [1.1.0] - 2025-03-01
 
 ### Added
 
@@ -124,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Restructured for PSGallery distribution
 
-## [1.0.0] - 2025-XX-XX
+## [1.0.0] - 2025-02-28
 
 ### Added
 
@@ -136,7 +128,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [Unreleased]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.3.0...HEAD
 [1.3.0]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.2.1...v1.3.0
-[1.2.1]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/Sriram-PR/pwsh-neofetch/compare/v1.1.0...v1.1.1

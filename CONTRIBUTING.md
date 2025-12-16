@@ -279,7 +279,6 @@ Before submitting, test these scenarios:
 - [ ] With existing config files
 - [ ] `-init` wizard flow
 - [ ] `-minimal` output
-- [ ] `-benchmark` completes without errors
 - [ ] `-live` graphs display correctly
 - [ ] Custom ASCII art (`-asciiart`)
 - [ ] Cache behavior (`-nocache`, `-changes`)
@@ -291,4 +290,4 @@ Before submitting, test these scenarios:
 - Open an [issue](https://github.com/Sriram-PR/pwsh-neofetch/issues) for bugs or feature requests
 - Check existing issues before creating new ones
 
-Thank you for contributing! 🚀
+Thank you for contributing!

@@ -27,7 +27,7 @@
             
             ProjectUri = 'https://github.com/Sriram-PR/pwsh-neofetch/tree/main'
             
-            ReleaseNotes = 'v1.3.0 - Renamed function to Invoke-Neofetch (neofetch alias preserved), removed benchmark feature, added ASCII art validation, consolidated configuration defaults. See CHANGELOG.md for details.'
+            ReleaseNotes = 'v1.3.0 - Renamed function to Invoke-Neofetch (alias preserved), added -AsObject for structured output, -WhatIf/-Confirm support, ASCII art validation, language-agnostic module relocator, removed benchmark feature, consolidated defaults. See CHANGELOG.md for details.'
         }
     }
 }
