@@ -4,6 +4,8 @@
 .DESCRIPTION
     Test suite to validate module functionality before publish.
     Run with: Invoke-Pester -Path ./tests/
+.NOTES
+    Some tests require Windows and are skipped on other platforms.
 #>
 
 BeforeAll {
@@ -19,6 +21,9 @@ BeforeAll {
     
     # Import fresh
     Import-Module $modulePath -Force -ErrorAction Stop
+    
+    # Platform detection for conditional tests
+    $script:IsWindows = $PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows
 }
 
 AfterAll {
@@ -100,18 +105,18 @@ Describe 'Module Import' {
         $command.Parameters.Keys | Should -Contain 'live'
     }
     
-    It 'Does not have benchmark parameter (removed in S10)' {
+    It 'Does not have benchmark parameter' {
         $command = Get-Command -Name 'Invoke-Neofetch'
         $command.Parameters.Keys | Should -Not -Contain 'benchmark'
     }
     
-    # S19: New parameter test
+    # New parameter test
     It 'Has AsObject parameter' {
         $command = Get-Command -Name 'Invoke-Neofetch'
         $command.Parameters.Keys | Should -Contain 'AsObject'
     }
     
-    # S16: SupportsShouldProcess test
+    # SupportsShouldProcess test
     It 'Supports -WhatIf and -Confirm' {
         $command = Get-Command -Name 'Invoke-Neofetch'
         $command.Parameters.Keys | Should -Contain 'WhatIf'
@@ -171,7 +176,7 @@ Describe 'Core Functions' {
     }
 }
 
-Describe 'ASCII Art Validation' {
+Describe 'ASCII Art Validation' -Skip:(-not ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows)) {
     BeforeAll {
         # Create temp files for testing
         $script:testDir = Join-Path $env:TEMP "neofetch_tests_$(Get-Random)"
@@ -250,7 +255,7 @@ Describe 'ASCII Art Validation' {
     }
 }
 
-Describe 'System Info Collection' {
+Describe 'System Info Collection' -Skip:(-not ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows)) {
     Context 'Get-SystemInfoFast' {
         BeforeAll {
             $script:sysInfo = & (Get-Module pwsh-neofetch) { 
@@ -300,7 +305,7 @@ Describe 'System Info Collection' {
     }
 }
 
-Describe 'AsObject Parameter' {
+Describe 'AsObject Parameter' -Skip:(-not ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows)) {
     Context 'Invoke-Neofetch -AsObject' {
         BeforeAll {
             $script:objectResult = Invoke-Neofetch -AsObject -nocache
@@ -344,7 +349,7 @@ Describe 'AsObject Parameter' {
     }
 }
 
-Describe 'WhatIf Support' {
+Describe 'WhatIf Support' -Skip:(-not ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows)) {
     Context 'Reset-NeofetchConfiguration with -WhatIf' {
         It 'Does not delete files when -WhatIf is specified' {
             # Test the internal function directly
@@ -371,7 +376,7 @@ Describe 'WhatIf Support' {
     }
 }
 
-Describe 'Help Parameter' {
+Describe 'Help Parameter' -Skip:(-not ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows)) {
     It 'neofetch -help does not throw' {
         { neofetch -help } | Should -Not -Throw
     }
@@ -419,7 +424,7 @@ Describe 'Backward Compatibility' {
     }
 }
 
-Describe 'Edge Cases' {
+Describe 'Edge Cases' -Skip:(-not ($PSVersionTable.PSVersion.Major -lt 6 -or $IsWindows)) {
     Context 'Empty or null inputs' {
         It 'Handles empty asciiart path gracefully' {
             { Invoke-Neofetch -asciiart "" -help } | Should -Not -Throw
