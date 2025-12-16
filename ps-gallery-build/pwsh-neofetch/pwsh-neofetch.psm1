@@ -5,10 +5,10 @@
 
 #region Module Configuration
 
-# Module-level error tracking for diagnostics (S8)
+# Module-level error tracking for diagnostics
 $script:LastErrors = @{}
 
-# S12: Consolidated default configuration values
+# Consolidated default configuration values
 $script:Defaults = @{
     # Cache settings
     CacheExpirationSeconds = 1800
@@ -24,7 +24,7 @@ $script:Defaults = @{
     LiveGraphHeight = 20
     LiveGraphWidth = 80
     
-    # ASCII art limits (S9)
+    # ASCII art limits
     MaxAsciiArtSizeKB = 20
 }
 
@@ -33,6 +33,7 @@ $script:Defaults = @{
 #region Initialization Functions
 
 function Initialize-NeofetchConfig {
+    [CmdletBinding(SupportsShouldProcess)]
     param (
         [switch]$Force
     )
@@ -86,7 +87,9 @@ function Initialize-NeofetchConfig {
         Write-Host "Setting profile to: ${BOLD}$profileName${RESET}"
     }
     
-    $profileName | Out-File -FilePath $profileNamePath -Force
+    if ($PSCmdlet.ShouldProcess($profileNamePath, "Save terminal profile name")) {
+        $profileName | Out-File -FilePath $profileNamePath -Force
+    }
     
     # Thread Configuration
     Write-Host "`n${BOLD}${CYAN}[2/4] Thread Configuration${RESET}"
@@ -114,7 +117,10 @@ function Initialize-NeofetchConfig {
     } while ($true)
     
     Write-Host "Setting max threads to: ${BOLD}$maxThreads${RESET}"
-    $maxThreads | Out-File -FilePath $threadsSavePath -Force
+    
+    if ($PSCmdlet.ShouldProcess($threadsSavePath, "Save thread configuration")) {
+        $maxThreads | Out-File -FilePath $threadsSavePath -Force
+    }
     
     # Cache Configuration
     Write-Host "`n${BOLD}${CYAN}[3/4] Cache Configuration${RESET}"
@@ -127,7 +133,10 @@ function Initialize-NeofetchConfig {
         $enableCache = $false
         Write-Host "Caching will be ${BOLD}disabled${RESET} (system info will be gathered fresh each time)"
         $cacheExpiration = 0
-        $cacheExpiration | Out-File -FilePath $cacheExpirationPath -Force
+        
+        if ($PSCmdlet.ShouldProcess($cacheExpirationPath, "Save cache expiration (disabled)")) {
+            $cacheExpiration | Out-File -FilePath $cacheExpirationPath -Force
+        }
     } else {
         Write-Host "Caching is ${BOLD}enabled${RESET} (system info will be cached between runs)"
         Write-Host "This sets how long (in seconds) before cache is refreshed."
@@ -151,7 +160,10 @@ function Initialize-NeofetchConfig {
         } while ($true)
         
         Write-Host "Setting cache expiration to: ${BOLD}$cacheExpiration seconds${RESET}"
-        $cacheExpiration | Out-File -FilePath $cacheExpirationPath -Force
+        
+        if ($PSCmdlet.ShouldProcess($cacheExpirationPath, "Save cache expiration ($cacheExpiration seconds)")) {
+            $cacheExpiration | Out-File -FilePath $cacheExpirationPath -Force
+        }
     }
     
     # ASCII Art Configuration
@@ -203,6 +215,9 @@ function Initialize-NeofetchConfig {
 }
 
 function Reset-NeofetchConfiguration {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+    
     $cacheFile = Join-Path $env:TEMP "neofetch_cache.xml"
     $configFiles = @(
         $cacheFile,
@@ -216,8 +231,10 @@ function Reset-NeofetchConfiguration {
     
     foreach ($file in $configFiles) {
         if (Test-Path $file) {
-            Remove-Item -Path $file -Force
-            $reloadCount++
+            if ($PSCmdlet.ShouldProcess($file, "Remove configuration file")) {
+                Remove-Item -Path $file -Force
+                $reloadCount++
+            }
         }
     }
     
@@ -380,7 +397,6 @@ function Get-SystemInfoFast {
         $results.Shell = "PowerShell " + $PSVersionTable.PSVersion.ToString()
     }
     
-    # S8: All scriptblocks now include Write-Verbose for error logging
     $scriptblocks.Host = {
         try {
             $ManufacturerKey = "HKLM:\HARDWARE\DESCRIPTION\System\BIOS"
@@ -683,6 +699,8 @@ function Get-SystemInfoFast {
     $runspacePool.Dispose()
 
     return @{
+        UserName = $results.UserName
+        HostName = $results.HostName
         UserHost = $results.UserHost
         OS = $results.OS
         Host = $results.Host
@@ -1101,7 +1119,7 @@ function Show-LiveUsageGraphs {
         return $outputGraphLines
     }
 
-    # S7 FIX: Initialize variables BEFORE try block to ensure they're available in finally
+    # Initialize variables BEFORE try block to ensure they're available in finally
     $psHost = $null
     $originalBufferWidth = 0
     $originalBufferHeight = 0
@@ -1228,7 +1246,7 @@ function Show-LiveUsageGraphs {
     finally {
         [Console]::CursorVisible = $true
         
-        # S7 FIX: Add null check before accessing $psHost
+        # Add null check before accessing $psHost
         if ($null -ne $psHost -and $originalBufferWidth -gt 0 -and $originalBufferHeight -gt 0) {
             try {
                 $newBufferSize = $psHost.UI.RawUI.BufferSize
@@ -1258,7 +1276,7 @@ function Get-ASCIIArt {
     $changeDescription = ""
     $hasColors = $false
     
-    # S9: Max file size from defaults (in KB)
+    # Max file size from defaults (in KB)
     $maxFileSizeKB = $script:Defaults.MaxAsciiArtSizeKB
     $maxFileSizeBytes = $maxFileSizeKB * 1024
 
@@ -1279,7 +1297,7 @@ function Get-ASCIIArt {
     }
 
     if ($CustomArtPath -and (Test-Path $CustomArtPath)) {
-        # S9: Validate the path and file
+        # Validate the path and file
         $validationResult = Test-AsciiArtPath -Path $CustomArtPath -MaxSizeBytes $maxFileSizeBytes
         
         if (-not $validationResult.IsValid) {
@@ -1296,7 +1314,7 @@ function Get-ASCIIArt {
             }
         }
         
-        # Show warning if path contains traversal (but still allow it per decision #2)
+        # Show warning if path contains traversal (but still allow it)
         if ($validationResult.HasTraversal) {
             Write-Warning $validationResult.Message
         }
@@ -1342,7 +1360,6 @@ function Get-ASCIIArt {
     }
 }
 
-# S9: New validation function for ASCII art paths
 function Test-AsciiArtPath {
     param (
         [Parameter(Mandatory = $true)]
@@ -1358,7 +1375,6 @@ function Test-AsciiArtPath {
         HasTraversal = $false
     }
     
-    # Check if path exists
     if (-not (Test-Path $Path)) {
         $result.IsValid = $false
         $result.Message = "ASCII art file not found: $Path"
@@ -1395,7 +1411,7 @@ function Test-AsciiArtPath {
         return $result
     }
     
-    # Check for path traversal (warn but don't block per decision #2)
+    # Check for path traversal (warn but don't block)
     if ($Path -match '\.\.[\\/]') {
         $result.HasTraversal = $true
         $result.Message = "Path contains directory traversal ('..') - proceeding with caution: $Path"
@@ -1473,6 +1489,7 @@ function Show-Usage {
     Write-Host "  -nocache             Disable caching and force fresh data collection." -ForegroundColor White
     Write-Host "  -minimal             Display a minimal view with only essential system information." -ForegroundColor White
     Write-Host "  -live                Display live CPU, RAM, GPU, and VRAM usage graphs." -ForegroundColor White
+    Write-Host "  -AsObject            Return system information as a PowerShell object instead of formatted display." -ForegroundColor White
     Write-Host "  -reload              Reset all configuration files and caches to defaults." -ForegroundColor White
     Write-Host "  -help                Display this help message." -ForegroundColor White
     Write-Host ""
@@ -1486,6 +1503,8 @@ function Show-Usage {
     Write-Host "  neofetch -changes" -ForegroundColor White
     Write-Host "  neofetch -maxThreads 8" -ForegroundColor White
     Write-Host "  neofetch -live" -ForegroundColor White
+    Write-Host "  neofetch -AsObject | ConvertTo-Json" -ForegroundColor White
+    Write-Host "  neofetch -AsObject | Select-Object OS, CPU, Memory" -ForegroundColor White
     Write-Host ""
 }
 
@@ -1493,9 +1512,8 @@ function Show-Usage {
 
 #region Main Function
 
-# S14: Renamed from 'neofetch' to 'Invoke-Neofetch' for Verb-Noun compliance
 function Invoke-Neofetch {
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory=$false)]
         [string]$asciiart = $null,
@@ -1543,7 +1561,10 @@ function Invoke-Neofetch {
         [switch]$Force = $false,
 
         [Parameter(Mandatory=$false)]
-        [switch]$live = $false
+        [switch]$live = $false,
+        
+        [Parameter(Mandatory=$false)]
+        [switch]$AsObject = $false
     )
 
     $ESC = [char]27
@@ -1566,7 +1587,7 @@ function Invoke-Neofetch {
         (Test-Path $configFiles[3])
     )
 
-    if ($isFirstRun -and -not ($help -or $changes -or $defaultart -or $maxThreads -or $defaultthreads -or $nocache -or 
+    if ($isFirstRun -and -not $AsObject -and -not ($help -or $changes -or $defaultart -or $maxThreads -or $defaultthreads -or $nocache -or 
         $cacheExpiration -or $defaultcache -or $profileName -or $defaultprofile -or $minimal -or 
         $reload -or $asciiart -or $live)) {
         Write-Host "${BOLD}${CYAN}First run detected!${RESET} Starting initial setup..." -ForegroundColor Cyan
@@ -1591,6 +1612,34 @@ function Invoke-Neofetch {
     if ($help) {
         Show-Usage
         return
+    }
+    
+    if ($AsObject) {
+        $SysInfo = Get-SystemInfoFast -NoCacheMode:$nocache -MaxThreadsOverride $maxThreads -CacheExpirationOverride $cacheExpiration
+        
+        # Return a clean PSCustomObject with typed properties
+        return [PSCustomObject]@{
+            PSTypeName   = 'Neofetch.SystemInfo'
+            UserName     = $SysInfo.UserName
+            HostName     = $SysInfo.HostName
+            OS           = $SysInfo.OS
+            Host         = $SysInfo.Host
+            Kernel       = $SysInfo.Kernel
+            Uptime       = $SysInfo.Uptime
+            Packages     = $SysInfo.Packages
+            Shell        = $SysInfo.Shell
+            Resolution   = $SysInfo.Resolution
+            WM           = $SysInfo.WM
+            Terminal     = $SysInfo.Terminal
+            TerminalFont = $SysInfo.TerminalFont
+            CPU          = $SysInfo.CPU
+            GPU          = $SysInfo.GPU
+            GPUMemory    = $SysInfo.GPUMemory
+            Memory       = $SysInfo.Memory
+            DiskUsage    = $SysInfo.DiskUsage
+            Battery      = $SysInfo.Battery
+            CollectedAt  = Get-Date
+        }
     }
 
     if ($profileName) {
@@ -1750,7 +1799,6 @@ function Invoke-Neofetch {
             Write-Host "  - Custom profile setting (default is $defaultProfileName)" -ForegroundColor White
         }
         
-        # S8: Show recent errors if any (diagnostic enhancement)
         if ($script:LastErrors.Count -gt 0) {
             Write-Host "`nRecent Errors (for diagnostics):" -ForegroundColor Yellow
             foreach ($key in $script:LastErrors.Keys) {
@@ -1899,7 +1947,6 @@ function Invoke-Neofetch {
     $endTime = Get-Date
     $executionTime = ($endTime - $startTime).TotalSeconds
     
-    # S17: Consider making this -Verbose only in future (Phase 4)
     Write-Verbose "Script execution time: $executionTime seconds"
 }
 
@@ -1907,7 +1954,6 @@ function Invoke-Neofetch {
 
 #region Module Exports
 
-# S14: Export the Verb-Noun compliant function and create backward-compatible alias
 New-Alias -Name 'neofetch' -Value 'Invoke-Neofetch' -Force -Scope Global
 
 Export-ModuleMember -Function Invoke-Neofetch -Alias neofetch
