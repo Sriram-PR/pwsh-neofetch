@@ -13,14 +13,15 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 
 ## Features
 
-- 📊 Comprehensive system information display
-- 🎨 Customizable ASCII art support
-- ⚡ Multi-threaded data collection for improved performance
-- 🔄 Smart caching system to reduce load times
-- 📱 Terminal profile detection for accurate font information
-- 📈 Live system monitoring with real-time graphs
-- 🧩 Minimal view option for essential information only
-- 🛠️ Configuration wizard for easy setup
+- Comprehensive system information display
+- Customizable ASCII art support
+- Multi-threaded data collection for improved performance
+- Smart caching system to reduce load times
+- Terminal profile detection for accurate font information
+- Live system monitoring with real-time graphs
+- Minimal view option for essential information only
+- Configuration wizard for easy setup
+- Structured output for scripting and automation
 
 ## Installation
 
@@ -120,7 +121,9 @@ neofetch [options]
 | `-nocache` | Disable caching and force fresh data collection |
 | `-minimal` | Display minimal view with essential system info only |
 | `-live` | Display live CPU, RAM, GPU, and VRAM usage graphs |
+| `-AsObject` | Return system info as PSObject for scripting/automation |
 | `-reload` | Reset all configuration files and caches |
+| `-WhatIf` | Preview what `-reload` or `-init` would do without making changes |
 | `-help` | Display help message |
 
 ### Examples
@@ -146,6 +149,15 @@ neofetch -changes
 
 # Force fresh data (bypass cache)
 neofetch -nocache
+
+# Get system info as object for scripting
+neofetch -AsObject | ConvertTo-Json
+
+# Select specific properties
+neofetch -AsObject | Select-Object OS, CPU, Memory
+
+# Preview reset without deleting files
+neofetch -reload -WhatIf
 ```
 
 ## Configuration
@@ -184,6 +196,13 @@ Example ASCII art file:
 ⣾⡻⡃⣿⣿⠸⢣⣾⢸⡸⣿⣿⢹⣿⣿⣿⠘⣿⣿⣿⢈⣿⢸⣿⣷⣭⣿⣿⡇⣿
 ⠃⣾⠃⣿⡏⢇⣮⣟⠸⡇⣿⣿⢸⠿⣿⣿⣤⢿⣿⣿⢸⢹⡆⡟⣸⣿⡟⣿⡇⣿
 ⢰⣿⠄⣿⡇⡜⠛⠛⠿⢤⢹⣿⣼⢀⣿⡏⠿⠄⣿⠟⣰⣦⢧⢱⣿⣿⠳⣿⠃⣿
+⡜⣿⡆⣿⡇⣿⣿⣷⣶⣾⣦⣄⣧⣸⡸⢧⣿⡨⠩⠦⠿⠿⡼⢸⣿⡿⣄⢈⡆⢸
+⠹⣿⡇⣿⡇⣿⣿⣿⣿⣿⣿⣿⢻⣿⣿⣿⣶⣶⣶⣶⣶⣶⡆⣿⣿⢇⡟⣼⡧⣫
+⠄⢹⡇⣿⡇⣿⣿⣿⣿⣿⣿⣧⣤⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⣿⣿⢘⣾⣿⢷⠋
+⠄⠈⡇⣿⡇⣹⣿⣿⣿⣿⣿⣧⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢣⣿⡟⣾⣿⣿⠄⠄
+⠄⠄⢠⣿⡇⣷⠘⢿⣿⣧⡲⣾⣭⣭⣿⣒⠊⣹⣿⣿⡿⠁⣸⣿⡇⣿⣿⡏⡇⠄
+⠄⠄⠄⣿⡇⣿⠄⠄⠙⢿⣿⣷⣶⣶⣶⣾⣿⣿⠟⠋⠄⠄⣿⣿⢳⣿⣿⢹⡇⠄
+⠄⠄⠄⠘⣿⢸⢰⣆⠄⠄⠙⠻⣿⡿⠟⠛⠉⠄⠄⠄⠄⠄⣿⡟⣼⣿⢏⣿⢧⣷
 ```
 
 <p align="center"><img alt="custom-ascii" src="https://github.com/Sriram-PR/pwsh-neofetch/blob/main/assets/neofetch-zerotwo.png" width="600px"></p>
@@ -237,9 +256,9 @@ neofetch -reload
 - [x] Caching system for improved performance
 - [x] Live system monitoring graphs
 - [x] Configuration wizard
+- [x] Structured output for scripting (`-AsObject`)
 - [ ] Color theme customization
 - [ ] User-configurable information display order
-- [ ] Export system information to file (JSON, CSV, TXT)
 - [ ] Remote system information collection
 - [ ] Gallery of pre-made ASCII art templates
 - [ ] Plugin system for custom information modules
