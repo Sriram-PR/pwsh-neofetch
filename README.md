@@ -13,14 +13,14 @@ A feature-rich PowerShell implementation of the popular Neofetch system informat
 
 ## Features
 
-- 📊 Comprehensive system information display
-- 🎨 Customizable ASCII art support
-- ⚡ Multi-threaded data collection for improved performance
-- 🔄 Smart caching system to reduce load times
-- 📱 Terminal profile detection for accurate font information
-- 📈 Live system monitoring with real-time graphs
-- 🧩 Minimal view option for essential information only
-- 🛠️ Configuration wizard for easy setup
+- Comprehensive system information display
+- Customizable ASCII art support
+- Multi-threaded data collection for improved performance
+- Smart caching system to reduce load times
+- Terminal profile detection for accurate font information
+- Live system monitoring with real-time graphs
+- Minimal view option for essential information only
+- Configuration wizard for easy setup
 
 ## Installation
 
