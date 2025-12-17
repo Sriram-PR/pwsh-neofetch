@@ -1,14 +1,17 @@
-﻿<#
+﻿#!/usr/bin/env pwsh
+<#
 .SYNOPSIS
     Uninstaller for pwsh-neofetch
 .DESCRIPTION
     Removes pwsh-neofetch from your system, including:
-    - Module files (both 'pwsh-neofetch' and legacy 'Neofetch' installations)
+    - Module files from PSModulePath locations
+    - Module files from installer fallback locations
+    - Legacy 'Neofetch' installations
     - Configuration files
     - Cache files
 .NOTES
     Author: Sriram PR
-    Version: 2.0
+    Version: 2.1
 #>
 
 [CmdletBinding()]
@@ -34,38 +37,78 @@ function Write-ColorMessage {
     Write-Host $Message -ForegroundColor $ForegroundColor
 }
 
-function Remove-ModuleFiles {
+function Get-AllModulePaths {
     <#
     .SYNOPSIS
-        Removes module files for both current and legacy module names
+        Returns all paths where pwsh-neofetch might be installed.
+    .DESCRIPTION
+        Combines paths from PSModulePath (where PowerShell looks) and
+        fallback paths (where installer might have placed the module).
     #>
     
     $moduleNames = @('pwsh-neofetch', 'Neofetch')
-    $basePaths = @(
+    $allPaths = @()
+    
+    # 1. Get paths from PSModulePath (where PowerShell actually looks)
+    $psModulePaths = $env:PSModulePath -split ';' | Where-Object {
+        $_ -match '(PowerShell|WindowsPowerShell)\\Modules$'
+    }
+    
+    foreach ($basePath in $psModulePaths) {
+        foreach ($moduleName in $moduleNames) {
+            $allPaths += Join-Path $basePath $moduleName
+        }
+    }
+    
+    # 2. Add hardcoded fallback paths (where installer puts modules)
+    $fallbackBases = @(
         (Join-Path $env:USERPROFILE 'Documents\PowerShell\Modules'),
         (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Modules')
     )
     
+    # 3. Add OneDrive fallback paths if OneDrive exists
+    if ($env:OneDrive) {
+        $fallbackBases += @(
+            (Join-Path $env:OneDrive 'Documents\PowerShell\Modules'),
+            (Join-Path $env:OneDrive 'Documents\WindowsPowerShell\Modules')
+        )
+    }
+    
+    foreach ($basePath in $fallbackBases) {
+        foreach ($moduleName in $moduleNames) {
+            $allPaths += Join-Path $basePath $moduleName
+        }
+    }
+    
+    # Return unique paths only
+    return $allPaths | Select-Object -Unique
+}
+
+function Remove-ModuleFiles {
+    <#
+    .SYNOPSIS
+        Removes module files from all known locations.
+    #>
+    
+    $allPaths = Get-AllModulePaths
     $removedCount = 0
     
-    foreach ($basePath in $basePaths) {
-        foreach ($moduleName in $moduleNames) {
-            $modulePath = Join-Path $basePath $moduleName
-            
-            if (Test-Path $modulePath) {
-                try {
-                    # Unload module if loaded
-                    if (Get-Module -Name $moduleName -ErrorAction SilentlyContinue) {
-                        Remove-Module -Name $moduleName -Force -ErrorAction SilentlyContinue
-                    }
-                    
-                    Remove-Item -Path $modulePath -Recurse -Force
-                    Write-ColorMessage "Removed module: $modulePath" -ForegroundColor Green
-                    $removedCount++
-                }
-                catch {
-                    Write-ColorMessage "Error removing module at ${modulePath}: $_" -ForegroundColor Red
-                }
+    # Unload modules if currently loaded
+    @('pwsh-neofetch', 'Neofetch') | ForEach-Object {
+        if (Get-Module -Name $_ -ErrorAction SilentlyContinue) {
+            Remove-Module -Name $_ -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    foreach ($modulePath in $allPaths) {
+        if (Test-Path $modulePath) {
+            try {
+                Remove-Item -Path $modulePath -Recurse -Force
+                Write-ColorMessage "  Removed: $modulePath" -ForegroundColor Green
+                $removedCount++
+            }
+            catch {
+                Write-ColorMessage "  Error removing ${modulePath}: $_" -ForegroundColor Red
             }
         }
     }
@@ -103,12 +146,12 @@ function Remove-ProfileEntries {
                 
                 if ($content -ne $originalContent) {
                     Set-Content -Path $profilePath -Value $content.Trim()
-                    Write-ColorMessage "Cleaned profile: $profilePath" -ForegroundColor Green
+                    Write-ColorMessage "  Cleaned profile: $profilePath" -ForegroundColor Green
                     $cleanedCount++
                 }
             }
             catch {
-                Write-ColorMessage "Error cleaning profile at ${profilePath}: $_" -ForegroundColor Red
+                Write-ColorMessage "  Error cleaning profile ${profilePath}: $_" -ForegroundColor Red
             }
         }
     }
@@ -142,7 +185,7 @@ function Remove-ConfigFiles {
                 Copy-Item -Path $filePath -Destination $backupDir -Force
             }
         }
-        Write-ColorMessage "Configuration files backed up to: $backupDir" -ForegroundColor Green
+        Write-ColorMessage "  Config files backed up to: $backupDir" -ForegroundColor Green
     }
     
     foreach ($file in $configFiles) {
@@ -150,11 +193,11 @@ function Remove-ConfigFiles {
         if (Test-Path $filePath) {
             try {
                 Remove-Item -Path $filePath -Force
-                Write-ColorMessage "Removed config: $filePath" -ForegroundColor Green
+                Write-ColorMessage "  Removed config: $file" -ForegroundColor Green
                 $removedCount++
             }
             catch {
-                Write-ColorMessage "Error removing config ${filePath}: $_" -ForegroundColor Red
+                Write-ColorMessage "  Error removing config ${filePath}: $_" -ForegroundColor Red
             }
         }
     }
@@ -174,11 +217,11 @@ function Remove-CacheFiles {
         if (Test-Path $filePath) {
             try {
                 Remove-Item -Path $filePath -Force
-                Write-ColorMessage "Removed cache: $filePath" -ForegroundColor Green
+                Write-ColorMessage "  Removed cache: $(Split-Path $filePath -Leaf)" -ForegroundColor Green
                 $removedCount++
             }
             catch {
-                Write-ColorMessage "Error removing cache ${filePath}: $_" -ForegroundColor Red
+                Write-ColorMessage "  Error removing cache ${filePath}: $_" -ForegroundColor Red
             }
         }
     }
@@ -186,11 +229,35 @@ function Remove-CacheFiles {
     return $removedCount
 }
 
+function Show-ModuleLocations {
+    <#
+    .SYNOPSIS
+        Shows where modules will be removed from.
+    #>
+    
+    $allPaths = Get-AllModulePaths
+    $foundPaths = $allPaths | Where-Object { Test-Path $_ }
+    
+    if ($foundPaths.Count -gt 0) {
+        Write-ColorMessage "`nModule installations found:" -ForegroundColor Cyan
+        foreach ($path in $foundPaths) {
+            Write-ColorMessage "  - $path" -ForegroundColor White
+        }
+    } else {
+        Write-ColorMessage "`nNo module installations found." -ForegroundColor Yellow
+    }
+    
+    return $foundPaths.Count
+}
+
 function Uninstall-PwshNeofetch {
     Write-ColorMessage "`n===== pwsh-neofetch Uninstaller =====" -ForegroundColor Cyan
     
+    # Show what will be removed
+    $foundCount = Show-ModuleLocations
+    
     if (-not $Force) {
-        $confirm = Read-Host "Are you sure you want to uninstall pwsh-neofetch? (y/N)"
+        $confirm = Read-Host "`nAre you sure you want to uninstall pwsh-neofetch? (y/N)"
         if ($confirm -notmatch '^[Yy]') {
             Write-ColorMessage "Uninstallation cancelled." -ForegroundColor Yellow
             return
@@ -200,21 +267,37 @@ function Uninstall-PwshNeofetch {
     Write-ColorMessage "`nRemoving pwsh-neofetch components...`n" -ForegroundColor Cyan
     
     # Remove module files
+    Write-ColorMessage "Module files:" -ForegroundColor Cyan
     $modulesRemoved = Remove-ModuleFiles
+    if ($modulesRemoved -eq 0) {
+        Write-ColorMessage "  No module files found." -ForegroundColor Gray
+    }
     
     # Remove profile entries
+    Write-ColorMessage "`nProfile entries:" -ForegroundColor Cyan
     $profilesCleaned = Remove-ProfileEntries
+    if ($profilesCleaned -eq 0) {
+        Write-ColorMessage "  No profile entries found." -ForegroundColor Gray
+    }
     
     # Handle config files
+    Write-ColorMessage "`nConfiguration files:" -ForegroundColor Cyan
     if ($KeepConfig) {
-        Write-ColorMessage "Keeping configuration files (--KeepConfig specified)" -ForegroundColor Yellow
+        Write-ColorMessage "  Keeping configuration files (-KeepConfig specified)" -ForegroundColor Yellow
         $configsRemoved = 0
     } else {
         $configsRemoved = Remove-ConfigFiles
+        if ($configsRemoved -eq 0) {
+            Write-ColorMessage "  No configuration files found." -ForegroundColor Gray
+        }
     }
     
     # Remove cache files
+    Write-ColorMessage "`nCache files:" -ForegroundColor Cyan
     $cacheRemoved = Remove-CacheFiles
+    if ($cacheRemoved -eq 0) {
+        Write-ColorMessage "  No cache files found." -ForegroundColor Gray
+    }
     
     # Summary
     Write-ColorMessage "`n===== Uninstallation Summary =====" -ForegroundColor Cyan
@@ -228,7 +311,7 @@ function Uninstall-PwshNeofetch {
     }
     
     Write-ColorMessage "`nComponents removed:" -ForegroundColor Cyan
-    Write-ColorMessage "  Module files:     $modulesRemoved" -ForegroundColor White
+    Write-ColorMessage "  Module locations: $modulesRemoved" -ForegroundColor White
     Write-ColorMessage "  Profile entries:  $profilesCleaned" -ForegroundColor White
     Write-ColorMessage "  Config files:     $(if ($KeepConfig) { 'Kept' } else { $configsRemoved })" -ForegroundColor White
     Write-ColorMessage "  Cache files:      $cacheRemoved" -ForegroundColor White

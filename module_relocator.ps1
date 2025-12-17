@@ -1,16 +1,19 @@
 ﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Relocates pwsh-neofetch module from OneDrive to local PowerShell Modules folder.
+    Relocates pwsh-neofetch module to the correct PowerShell Modules folder.
 .DESCRIPTION
-    OneDrive's Known Folder Move (KFM) feature can cause PowerShell module path issues.
-    This script finds pwsh-neofetch in OneDrive folders (regardless of language/locale)
-    and copies it to the standard local Modules path.
+    The direct-installer uses standard paths (e.g., Documents\WindowsPowerShell\Modules),
+    but PowerShell may expect modules elsewhere due to:
+    - OneDrive Known Folder Move (KFM)
+    - Localized folder names (e.g., Japanese ドキュメント, German Dokumente)
+    - Custom PSModulePath configuration
     
-    S15: Uses recursive search instead of hardcoded localised paths to support all languages.
+    This script finds pwsh-neofetch wherever it was installed and copies it to
+    the correct location detected from $env:PSModulePath.
 .NOTES
     Author: Sriram PR
-    Version: 2.0
+    Version: 2.1
 #>
 
 [CmdletBinding()]
@@ -18,19 +21,74 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$targetBase = Join-Path -Path $env:USERPROFILE -ChildPath "Documents\WindowsPowerShell\Modules"
-$targetModuleFolder = Join-Path -Path $targetBase -ChildPath "pwsh-neofetch"
+$script:ModuleName = 'pwsh-neofetch'
 
-if (-not (Test-Path -Path $targetBase)) {
-    Write-Host "Creating target directory: $targetBase" -ForegroundColor Cyan
-    New-Item -Path $targetBase -ItemType Directory -Force | Out-Null
+function Get-TargetModulePath {
+    <#
+    .SYNOPSIS
+        Determines where PowerShell actually expects user modules by reading $env:PSModulePath.
+    #>
+    
+    $isPSCore = $PSVersionTable.PSEdition -eq 'Core'
+    $searchPattern = if ($isPSCore) { 'PowerShell\\Modules$' } else { 'WindowsPowerShell\\Modules$' }
+    
+    # Find user-specific path from PSModulePath
+    $userModulePath = $env:PSModulePath -split ';' | Where-Object {
+        $_ -match $searchPattern -and 
+        $_ -notmatch '^C:\\Program Files' -and 
+        $_ -notmatch '^C:\\WINDOWS'
+    } | Select-Object -First 1
+    
+    if ($userModulePath) {
+        return $userModulePath
+    }
+    
+    return $null
 }
 
-# Find OneDrive paths from registry (more reliable than hardcoded paths)
-function Get-OneDrivePaths {
+function Find-ModuleInFallbackPaths {
+    <#
+    .SYNOPSIS
+        Searches common installation paths where direct-installer may have placed the module.
+    #>
+    
+    $fallbackPaths = @(
+        # Standard paths (where installer puts it)
+        (Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\Modules\$script:ModuleName"),
+        (Join-Path $env:USERPROFILE "Documents\PowerShell\Modules\$script:ModuleName")
+    )
+    
+    # Add OneDrive variants if OneDrive exists
+    if ($env:OneDrive) {
+        $fallbackPaths += @(
+            (Join-Path $env:OneDrive "Documents\WindowsPowerShell\Modules\$script:ModuleName"),
+            (Join-Path $env:OneDrive "Documents\PowerShell\Modules\$script:ModuleName")
+        )
+    }
+    
+    foreach ($path in $fallbackPaths) {
+        if (Test-Path $path) {
+            $psd1 = Join-Path $path "pwsh-neofetch.psd1"
+            $psm1 = Join-Path $path "pwsh-neofetch.psm1"
+            
+            if ((Test-Path $psd1) -and (Test-Path $psm1)) {
+                return $path
+            }
+        }
+    }
+    
+    return $null
+}
+
+function Find-ModuleInOneDrive {
+    <#
+    .SYNOPSIS
+        Searches OneDrive folders recursively for the module (handles localized folder names).
+    #>
+    
+    # Get OneDrive paths from registry
     $oneDrivePaths = @()
     
-    # Check current user's OneDrive registry keys
     $oneDriveKeys = @(
         "HKCU:\Software\Microsoft\OneDrive\Accounts\Personal",
         "HKCU:\Software\Microsoft\OneDrive\Accounts\Business1",
@@ -43,7 +101,6 @@ function Get-OneDrivePaths {
                 $userFolder = Get-ItemProperty -Path $keyPath -Name "UserFolder" -ErrorAction SilentlyContinue
                 if ($userFolder -and $userFolder.UserFolder -and (Test-Path $userFolder.UserFolder)) {
                     $oneDrivePaths += $userFolder.UserFolder
-                    Write-Verbose "Found OneDrive path from registry: $($userFolder.UserFolder)"
                 }
             }
             catch {
@@ -52,54 +109,38 @@ function Get-OneDrivePaths {
         }
     }
     
-    # Fallback: Check common OneDrive locations in user profiles
-    $userFolders = Get-ChildItem -Path "C:\Users" -Directory -ErrorAction SilentlyContinue | 
-        Where-Object { $_.Name -notin @("Administrator", "Public", "Default", "defaultuser0", "All Users") }
-    
-    foreach ($userFolder in $userFolders) {
-        # Find any folder starting with "OneDrive" (handles "OneDrive", "OneDrive - Company", etc.)
-        $potentialOneDrives = Get-ChildItem -Path $userFolder.FullName -Directory -ErrorAction SilentlyContinue |
+    # Fallback: scan user profile for OneDrive folders
+    if ($oneDrivePaths.Count -eq 0) {
+        $potentialOneDrives = Get-ChildItem -Path $env:USERPROFILE -Directory -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -like "OneDrive*" }
         
         foreach ($od in $potentialOneDrives) {
-            if ($od.FullName -notin $oneDrivePaths) {
-                $oneDrivePaths += $od.FullName
-                Write-Verbose "Found OneDrive path from filesystem: $($od.FullName)"
-            }
+            $oneDrivePaths += $od.FullName
         }
     }
     
-    return $oneDrivePaths | Select-Object -Unique
-}
-
-# Language-agnostic recursive search for the module
-function Find-ModuleInOneDrive {
-    param (
-        [string[]]$OneDrivePaths,
-        [string]$ModuleName = "pwsh-neofetch"
-    )
+    $oneDrivePaths = $oneDrivePaths | Select-Object -Unique
     
-    foreach ($oneDrivePath in $OneDrivePaths) {
-        Write-Host "Searching in: $oneDrivePath" -ForegroundColor Yellow
+    if ($oneDrivePaths.Count -eq 0) {
+        return $null
+    }
+    
+    foreach ($oneDrivePath in $oneDrivePaths) {
+        Write-Host "  Searching: $oneDrivePath" -ForegroundColor Gray
         
-        # Search for Modules folders containing pwsh-neofetch
-        # This handles any language: Documents, ドキュメント, 文件, 문서, Documenti, etc.
         try {
             $modulePaths = Get-ChildItem -Path $oneDrivePath -Recurse -Directory -ErrorAction SilentlyContinue -Depth 4 |
-                Where-Object { $_.Name -eq $ModuleName } |
+                Where-Object { $_.Name -eq $script:ModuleName } |
                 Where-Object { 
-                    # Verify it's in a Modules folder (PowerShell or WindowsPowerShell)
                     $_.Parent.Name -eq "Modules" -and 
                     ($_.Parent.Parent.Name -eq "PowerShell" -or $_.Parent.Parent.Name -eq "WindowsPowerShell")
                 }
             
             foreach ($modulePath in $modulePaths) {
-                # Verify it contains the expected module files
                 $psd1 = Join-Path $modulePath.FullName "pwsh-neofetch.psd1"
                 $psm1 = Join-Path $modulePath.FullName "pwsh-neofetch.psm1"
                 
                 if ((Test-Path $psd1) -and (Test-Path $psm1)) {
-                    Write-Host "  Found valid module at: $($modulePath.FullName)" -ForegroundColor Green
                     return $modulePath.FullName
                 }
             }
@@ -112,67 +153,121 @@ function Find-ModuleInOneDrive {
     return $null
 }
 
-Write-Host "Searching for 'pwsh-neofetch' module in OneDrive folders..." -ForegroundColor Cyan
-Write-Host "(This may take a moment for large OneDrive folders)" -ForegroundColor Gray
+# =============================================================================
+# Main Script
+# =============================================================================
 
-$oneDrivePaths = Get-OneDrivePaths
+Write-Host "`n===== pwsh-neofetch Module Relocator =====" -ForegroundColor Cyan
+Write-Host "This script moves the module to where PowerShell expects it.`n" -ForegroundColor Cyan
 
-if ($oneDrivePaths.Count -eq 0) {
-    Write-Host "No OneDrive folders found." -ForegroundColor Yellow
-    Write-Host "If you're experiencing module path issues, try reinstalling from PowerShell Gallery:" -ForegroundColor Cyan
-    Write-Host "  Install-Module -Name pwsh-neofetch -Force" -ForegroundColor White
+# Step 1: Determine where PowerShell expects modules
+Write-Host "[1/3] Detecting correct module path from PSModulePath..." -ForegroundColor Cyan
+
+$targetBase = Get-TargetModulePath
+
+if (-not $targetBase) {
+    Write-Host "Error: Could not detect user module path from PSModulePath." -ForegroundColor Red
+    Write-Host "Your PSModulePath:" -ForegroundColor Yellow
+    $env:PSModulePath -split ';' | ForEach-Object { Write-Host "  - $_" -ForegroundColor Gray }
+    Write-Host "`nPlease ensure PSModulePath includes a user-writable Modules folder." -ForegroundColor Yellow
+    exit 1
+}
+
+$targetModuleFolder = Join-Path $targetBase $script:ModuleName
+Write-Host "  Target: $targetBase" -ForegroundColor Green
+
+# Step 2: Check if module already exists at target
+if (Test-Path $targetModuleFolder) {
+    $psd1 = Join-Path $targetModuleFolder "pwsh-neofetch.psd1"
+    if (Test-Path $psd1) {
+        Write-Host "`nModule already exists at correct location: $targetModuleFolder" -ForegroundColor Green
+        
+        try {
+            $manifest = Test-ModuleManifest -Path $psd1 -ErrorAction Stop -WarningAction SilentlyContinue
+            Write-Host "  Version: $($manifest.Version)" -ForegroundColor Green
+        }
+        catch {
+            Write-Warning "Module exists but manifest validation failed: $_"
+        }
+        
+        Write-Host "`nNo relocation needed. Try running 'neofetch' in a new PowerShell window." -ForegroundColor Cyan
+        exit 0
+    }
+}
+
+# Step 3: Find where the module is currently installed
+Write-Host "`n[2/3] Searching for installed module..." -ForegroundColor Cyan
+
+# First check standard fallback paths
+$sourcePath = Find-ModuleInFallbackPaths
+
+if (-not $sourcePath) {
+    Write-Host "  Not found in standard paths, searching OneDrive..." -ForegroundColor Yellow
+    $sourcePath = Find-ModuleInOneDrive
+}
+
+if (-not $sourcePath) {
+    Write-Host "`nError: Could not find pwsh-neofetch module anywhere." -ForegroundColor Red
+    Write-Host "`nSearched locations:" -ForegroundColor Yellow
+    Write-Host "  - $env:USERPROFILE\Documents\WindowsPowerShell\Modules" -ForegroundColor Gray
+    Write-Host "  - $env:USERPROFILE\Documents\PowerShell\Modules" -ForegroundColor Gray
+    Write-Host "  - OneDrive folders (recursive)" -ForegroundColor Gray
+    Write-Host "`nPlease run the installer first:" -ForegroundColor Cyan
+    Write-Host "  .\direct-installer.ps1" -ForegroundColor White
+    Write-Host "  or" -ForegroundColor Gray
+    Write-Host "  Install-Module -Name pwsh-neofetch" -ForegroundColor White
+    exit 1
+}
+
+Write-Host "  Found: $sourcePath" -ForegroundColor Green
+
+# Check if source and target are the same
+if ($sourcePath -eq $targetModuleFolder) {
+    Write-Host "`nModule is already in the correct location!" -ForegroundColor Green
+    Write-Host "Try running 'neofetch' in a new PowerShell window." -ForegroundColor Cyan
     exit 0
 }
 
-Write-Host "Found $($oneDrivePaths.Count) OneDrive location(s) to search." -ForegroundColor Cyan
+# Step 4: Copy to correct location
+Write-Host "`n[3/3] Relocating module..." -ForegroundColor Cyan
+Write-Host "  From: $sourcePath" -ForegroundColor Gray
+Write-Host "  To:   $targetModuleFolder" -ForegroundColor Gray
 
-$sourcePath = Find-ModuleInOneDrive -OneDrivePaths $oneDrivePaths
+# Create target directory if needed
+if (-not (Test-Path $targetBase)) {
+    Write-Host "  Creating directory: $targetBase" -ForegroundColor Yellow
+    New-Item -Path $targetBase -ItemType Directory -Force | Out-Null
+}
 
-if ($sourcePath) {
-    Write-Host "`nModule found at: $sourcePath" -ForegroundColor Green
-    
-    if (Test-Path -Path $targetModuleFolder) {
-        Write-Host "Target module folder already exists: $targetModuleFolder" -ForegroundColor Yellow
-        $overwrite = Read-Host "Do you want to overwrite it? (Y/N)"
-        
-        if ($overwrite -notmatch '^[Yy]') {
-            Write-Host "Operation cancelled." -ForegroundColor Red
-            exit 0
-        }
-        
-        $backupFolder = "$targetModuleFolder.backup"
-        Write-Host "Creating backup of existing module folder: $backupFolder" -ForegroundColor Cyan
-        if (Test-Path -Path $backupFolder) {
-            Remove-Item -Path $backupFolder -Recurse -Force
-        }
-        Rename-Item -Path $targetModuleFolder -NewName (Split-Path -Leaf $backupFolder)
+# Handle existing target
+if (Test-Path $targetModuleFolder) {
+    $overwrite = Read-Host "Target folder exists. Overwrite? (Y/n)"
+    if ($overwrite -match '^[Nn]') {
+        Write-Host "Relocation cancelled." -ForegroundColor Yellow
+        exit 0
     }
     
-    Write-Host "Copying module to: $targetModuleFolder" -ForegroundColor Cyan
-    Copy-Item -Path $sourcePath -Destination $targetModuleFolder -Recurse -Force
-    
-    Write-Host "`nModule successfully relocated!" -ForegroundColor Green
-    Write-Host "You can now use 'neofetch' command from any PowerShell prompt." -ForegroundColor Cyan
-    
-    # Verify the copy
-    $verifyPsd1 = Join-Path $targetModuleFolder "pwsh-neofetch.psd1"
-    if (Test-Path $verifyPsd1) {
-        try {
-            $manifest = Test-ModuleManifest -Path $verifyPsd1 -ErrorAction Stop -WarningAction SilentlyContinue
-            Write-Host "Verified: Module version $($manifest.Version) installed." -ForegroundColor Green
-        }
-        catch {
-            Write-Warning "Module copied but manifest validation failed: $_"
-        }
+    $backupFolder = "$targetModuleFolder.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Write-Host "  Creating backup: $backupFolder" -ForegroundColor Yellow
+    Rename-Item -Path $targetModuleFolder -NewName (Split-Path -Leaf $backupFolder)
+}
+
+# Copy module
+Copy-Item -Path $sourcePath -Destination $targetModuleFolder -Recurse -Force
+
+# Verify
+Write-Host "`n===== Relocation Complete! =====" -ForegroundColor Green
+
+$verifyPsd1 = Join-Path $targetModuleFolder "pwsh-neofetch.psd1"
+if (Test-Path $verifyPsd1) {
+    try {
+        $manifest = Test-ModuleManifest -Path $verifyPsd1 -ErrorAction Stop -WarningAction SilentlyContinue
+        Write-Host "  Verified: Version $($manifest.Version) installed at correct location." -ForegroundColor Green
+    }
+    catch {
+        Write-Warning "Module copied but manifest validation failed: $_"
     }
 }
-else {
-    Write-Host "`nModule 'pwsh-neofetch' not found in any OneDrive folder." -ForegroundColor Red
-    Write-Host "`nSearched locations:" -ForegroundColor Yellow
-    foreach ($path in $oneDrivePaths) {
-        Write-Host "  - $path" -ForegroundColor Gray
-    }
-    Write-Host "`nPossible solutions:" -ForegroundColor Cyan
-    Write-Host "  1. Install from PowerShell Gallery: Install-Module -Name pwsh-neofetch" -ForegroundColor White
-    Write-Host "  2. Run the direct installer: .\direct-installer.ps1" -ForegroundColor White
-}
+
+Write-Host "`nYou can now use 'neofetch' from any new PowerShell window." -ForegroundColor Cyan
+Write-Host "The old installation at '$sourcePath' can be safely deleted." -ForegroundColor Gray
